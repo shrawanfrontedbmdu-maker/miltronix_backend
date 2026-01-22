@@ -112,177 +112,177 @@ const client = twilio(
 //   }
 // };
 
-const sendOtp = async (contactNumber) => {
-  const generatedOtp = otpGenerator.generate(6, {
-    upperCase: false,
-    specialChars: false,
-  });
+// const sendOtp = async (contactNumber) => {
+//   const generatedOtp = otpGenerator.generate(6, {
+//     upperCase: false,
+//     specialChars: false,
+//   });
 
-  await Otp.deleteMany({ contactNumber });
+//   await Otp.deleteMany({ contactNumber });
 
-  await Otp.create({
-    contactNumber,
-    otp: generatedOtp,
-  });
+//   await Otp.create({
+//     contactNumber,
+//     otp: generatedOtp,
+//   });
 
-  await client.messages.create({
-    body: `Your OTP is ${generatedOtp}`,
-    from: process.env.TWILIO_PHONE_NUMBER,
-    to: contactNumber,
-  });
+//   await client.messages.create({
+//     body: `Your OTP is ${generatedOtp}`,
+//     from: process.env.TWILIO_PHONE_NUMBER,
+//     to: contactNumber,
+//   });
+// };
+export const userSignup = async (req, res) => {
+  try {
+    const { name, password, email } = req.body;
+    const contactNumber = Number(req.body.contactNumber);
+
+    if (!name || !password || !contactNumber || !email) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    if (isNaN(contactNumber)) {
+      return res.status(400).json({ message: "Invalid mobile number" });
+    }
+
+    if (!validatePhoneNumber(String(contactNumber), "IN")) {
+      return res.status(400).json({ message: "Invalid Indian mobile number" });
+    }
+
+    if (!email) {
+      return res.status(400).json({ message: "Email not found" });
+
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format"
+      });
+    }
+
+    // const verifyOtp = await sendOtp(contactNumber);
+    // const { otp } = req.body;
+    // if (!otp) {
+    //   return res.status(400).json({ message: "OTP is required" });
+    // }
+
+    // if (otp !== verifyOtp) {
+    //   return res.status(400).json({ message: "Invalid OTP" });
+    // }
+
+
+    const existingUser = await User.findOne({ contactNumber });
+    if (existingUser) {
+      return res.status(409).json({ message: "User already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      contactNumber,
+      hashedPassword,
+      email
+    });
+
+    res.status(201).json({ message: "User registered", userId: user._id });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
+
 // export const userSignup = async (req, res) => {
 //   try {
-//     const { name, password, email } = req.body;
-//     const contactNumber = Number(req.body.contactNumber);
+//     const { name, email, password, contactNumber } = req.body;
 
-//     if (!name || !password || !contactNumber || !email) {
+//     if (!name || !email || !password || !contactNumber) {
 //       return res.status(400).json({ message: "All fields are required" });
 //     }
 
-//     if (isNaN(contactNumber)) {
-//       return res.status(400).json({ message: "Invalid mobile number" });
-//     }
-
-//     if (!validatePhoneNumber(String(contactNumber), "IN")) {
+//     if (!validatePhoneNumber(contactNumber, "IN")) {
 //       return res.status(400).json({ message: "Invalid Indian mobile number" });
 //     }
 
-//     if (!email) {
-//       return res.status(400).json({ message: "Email not found" });
-
-//     }
-//     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-//     if (!emailRegex.test(email)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid email format"
-//       });
-//     }
-
-//     const verifyOtp = await sendOtp(contactNumber);
-//     const { otp } = req.body;
-//     if (!otp) {
-//       return res.status(400).json({ message: "OTP is required" });
-//     }
-
-//     if (otp !== verifyOtp) {
-//       return res.status(400).json({ message: "Invalid OTP" });
-//     }
-
-
-//     const existingUser = await User.findOne({ contactNumber });
-//     if (existingUser) {
+//     const userExists = await User.findOne({ contactNumber });
+//     if (userExists) {
 //       return res.status(409).json({ message: "User already exists" });
 //     }
 
-//     const hashedPassword = await bcrypt.hash(password, 10);
+//     await penddinguser.deleteMany({ contactNumber });
 
-//     const user = await User.create({
+//     await penddinguser.create({
 //       name,
+//       email,
+//       password, // temporary
 //       contactNumber,
-//       hashedPassword,
-//       email
 //     });
 
-//     res.status(201).json({ message: "User registered", userId: user._id });
+//     await client.verify.v2
+//       .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+//       .verifications.create({
+//         to: `+91${contactNumber}`,
+//         channel: "sms",
+//       });
 
+//     res.status(200).json({ message: "OTP sent successfully" });
 //   } catch (error) {
 //     res.status(500).json({ message: error.message });
 //   }
 // };
 
-export const userSignup = async (req, res) => {
-  try {
-    const { name, email, password, contactNumber } = req.body;
-
-    if (!name || !email || !password || !contactNumber) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    if (!validatePhoneNumber(contactNumber, "IN")) {
-      return res.status(400).json({ message: "Invalid Indian mobile number" });
-    }
-
-    const userExists = await User.findOne({ contactNumber });
-    if (userExists) {
-      return res.status(409).json({ message: "User already exists" });
-    }
-
-    await penddinguser.deleteMany({ contactNumber });
-
-    await penddinguser.create({
-      name,
-      email,
-      password, // temporary
-      contactNumber,
-    });
-
-    await client.verify.v2
-      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-      .verifications.create({
-        to: `+91${contactNumber}`,
-        channel: "sms",
-      });
-
-    res.status(200).json({ message: "OTP sent successfully" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
 
 
+// export const verifyOtpAndRegister = async (req, res) => {
+//   try {
+//     const { contactNumber, otp } = req.body;
 
-export const verifyOtpAndRegister = async (req, res) => {
-  try {
-    const { contactNumber, otp } = req.body;
+//     if (!contactNumber || !otp) {
+//       return res.status(400).json({ message: "OTP and contact number required" });
+//     }
 
-    if (!contactNumber || !otp) {
-      return res.status(400).json({ message: "OTP and contact number required" });
-    }
+//     const verification = await client.verify.v2
+//       .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+//       .verificationChecks.create({
+//         to: `+91${contactNumber}`,
+//         code: otp,
+//       });
 
-    const verification = await client.verify.v2
-      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-      .verificationChecks.create({
-        to: `+91${contactNumber}`,
-        code: otp,
-      });
+//     if (verification.status !== "approved") {
+//       return res.status(400).json({ message: "Invalid or expired OTP" });
+//     }
 
-    if (verification.status !== "approved") {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
+//     const pendingUser = await penddinguser.findOne({ contactNumber });
+//     if (!pendingUser) {
+//       return res.status(400).json({ message: "Signup data not found" });
+//     }
 
-    const pendingUser = await penddinguser.findOne({ contactNumber });
-    if (!pendingUser) {
-      return res.status(400).json({ message: "Signup data not found" });
-    }
+//     const hashedPassword = await bcrypt.hash(pendingUser.password, 10);
 
-    const hashedPassword = await bcrypt.hash(pendingUser.password, 10);
+//     const user = await User.create({
+//       name: pendingUser.name,
+//       email: pendingUser.email,
+//       contactNumber,
+//       hashedPassword,
+//     });
 
-    const user = await User.create({
-      name: pendingUser.name,
-      email: pendingUser.email,
-      contactNumber,
-      hashedPassword,
-    });
+//     await pendingUser.deleteOne({ contactNumber });
 
-    await pendingUser.deleteOne({ contactNumber });
+//     const token = jwt.sign(
+//       { id: user._id, role: "user" },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "7d" }
+//     );
 
-    const token = jwt.sign(
-      { id: user._id, role: "user" },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.status(201).json({
-      message: "User registered successfully",
-      token,
-      userId: user._id,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+//     res.status(201).json({
+//       message: "User registered successfully",
+//       token,
+//       userId: user._id,
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// };
 
 
 export const userLogin = async (req, res) => {

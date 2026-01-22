@@ -1,5 +1,4 @@
 import Order from "../models/order.model.js";
-
 export const getOrders = async (req, res) => {
   try {
     const orders = await Order.find();
@@ -10,11 +9,14 @@ export const getOrders = async (req, res) => {
     });
   }
 };
+const generateDeliveryNumber = () => {
+  return 'DLV-' + Date.now().toString().slice(-6);
+};
 
 export const createOrder = async (req, res) => {
   try {
     const { products, customerName, totalAmount } = req.body;
-
+    const trackingnumber = generateDeliveryNumber()
     console.log("Incoming order body:", req.body);
 
     if (!products || !Array.isArray(products) || products.length === 0) {
@@ -34,7 +36,6 @@ export const createOrder = async (req, res) => {
         message: "Total amount is required and must be a positive number.",
       });
     }
-
     const newOrder = await Order.create({
       customerName,
       products,
@@ -51,6 +52,7 @@ export const createOrder = async (req, res) => {
       shippingCost: req.body.shippingCost || 0,
       discountAmount: req.body.discountAmount || 0,
       isActive: true,
+      trackingnumber: trackingnumber,
     });
 
     res.status(201).json({
@@ -220,6 +222,8 @@ export const editOrderById = async (req, res) => {
       });
     }
 
+    const findTrackingid = await Order.findById(id);
+    const trackingnumber = findTrackingid.trackingnumber ? findTrackingid.trackingnumber : "";
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
       {
@@ -229,6 +233,7 @@ export const editOrderById = async (req, res) => {
         paymentStatus,
         orderStatus,
         totalAmount,
+        trackingnumber,
       },
       { new: true }
     );

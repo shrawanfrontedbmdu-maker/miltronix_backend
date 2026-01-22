@@ -24,6 +24,9 @@ const orderSchema = new mongoose.Schema({
         type: Number,
         required: true,
       },
+      sku: {
+        type: String,
+      }
     },
   ],
   shippingAddress: {
@@ -82,6 +85,11 @@ const orderSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true,
+  },
+  trackingnumber: {
+    type: String,
+    required: true,
+    unique: true,
   },
 });
 

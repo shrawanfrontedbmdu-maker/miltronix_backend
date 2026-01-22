@@ -4,8 +4,9 @@ export const getInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find();
     if (!invoices) {
-      return res.status(400).json({success:false,
-        message:"No Invoice are Found"
+      return res.status(400).json({
+        success: false,
+        message: "No Invoice are Found"
       })
     } else {
       return res.status(200).status(200).json(invoices);
@@ -186,13 +187,6 @@ export const deleteInvoiceById = async (req, res) => {
 
 export const getInvoicesByMonth = async (req, res) => {
   try {
-    const { thisMonth } = req.query;
-    if (!thisMonth) {
-      return res.status(400).json({
-        success: false,
-        message: "thisMonth Query is Required"
-      });
-    }
     // For current date
     const now = new Date()
 
