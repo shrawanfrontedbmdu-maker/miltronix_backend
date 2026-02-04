@@ -1,60 +1,52 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js"; // Ensure filename matches
+import User from "../models/user.model.js";
+import { sendOtpSMS } from "../utils/sendOtp.js";
 
-// 🔹 OTP generator
 const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
 
-// ================= SIGNUP =================
+// ---------------- SIGNUP ----------------
 export const signup = async (req, res) => {
   try {
     const { fullName, email, mobile, password } = req.body;
+    if (!fullName || !mobile || !password)
+      return res.status(400).json({ message: "All fields required" });
 
-    // Validate required fields
-    if (!fullName || !mobile || !password) {
-      return res.status(400).json({ message: "FullName, Mobile & Password are required" });
-    }
-
-    // Check if mobile already exists
-    const existingUser = await User.findOne({ mobile });
-    if (existingUser) {
-      return res.status(400).json({ message: "Mobile already registered" });
-    }
-
-    // Hash password
+    let user = await User.findOne({ mobile });
+    const otp = generateOTP();
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate OTP
-    const otp = generateOTP();
+    if (user) {
+      if (user.isVerified)
+        return res.status(400).json({ message: "Mobile already registered" });
 
-    // Create user
-    const user = await User.create({
+      user.otp = otp;
+      user.otpExpiry = Date.now() + 2 * 60 * 1000;
+      await user.save();
+      await sendOtpSMS(mobile, otp);
+      return res.json({ message: "OTP resent successfully" });
+    }
+
+    user = await User.create({
       fullName,
-      email: email || null, // optional
+      email,
       mobile,
       password: hashedPassword,
       otp,
-      otpExpiry: Date.now() + 2 * 60 * 1000 // 2 minutes
+      otpExpiry: Date.now() + 2 * 60 * 1000,
     });
-
-    console.log(`OTP for ${mobile} : ${otp}`); // Replace with SMS integration
-
-    res.status(201).json({ message: "OTP sent to mobile", userId: user._id });
+    await sendOtpSMS(mobile, otp);
+    res.status(201).json({ message: "OTP sent successfully" });
   } catch (err) {
-    // Handle duplicate key error (just in case)
-    if (err.code === 11000) {
-      return res.status(400).json({ message: "Mobile or Email already exists" });
-    }
     res.status(500).json({ message: err.message });
   }
 };
 
-// ================= VERIFY OTP =================
+
+// ---------------- VERIFY OTP ----------------
 export const verifyOtp = async (req, res) => {
   try {
     const { mobile, otp } = req.body;
-    if (!mobile || !otp) return res.status(400).json({ message: "Mobile & OTP required" });
-
     const user = await User.findOne({ mobile });
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -65,66 +57,77 @@ export const verifyOtp = async (req, res) => {
     user.otp = null;
     user.otpExpiry = null;
     await user.save();
-
     res.json({ message: "OTP verified successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// ================= LOGIN =================
+// ---------------- LOGIN ----------------
 export const login = async (req, res) => {
   try {
     const { mobile, password } = req.body;
-    if (!mobile || !password)
-      return res.status(400).json({ message: "Mobile & Password required" });
-
     const user = await User.findOne({ mobile });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (!user.isVerified) return res.status(401).json({ message: "Please verify OTP first" });
+    if (!user.isVerified) return res.status(401).json({ message: "Verify OTP first" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET || "SECRET_KEY",
-      { expiresIn: "7d" }
-    );
-
-    res.json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        mobile: user.mobile,
-        email: user.email || null
-      }
-    });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// ================= RESEND OTP =================
-export const resendOtp = async (req, res) => {
+// ---------------- FORGOT PASSWORD ----------------
+export const forgotPassword = async (req, res) => {
   try {
     const { mobile } = req.body;
-    if (!mobile) return res.status(400).json({ message: "Mobile required" });
-
     const user = await User.findOne({ mobile });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const otp = generateOTP();
-    user.otp = otp;
-    user.otpExpiry = Date.now() + 2 * 60 * 1000; // 2 minutes
+    user.resetOtp = otp;
+    user.resetOtpExpiry = Date.now() + 2 * 60 * 1000;
     await user.save();
+    await sendOtpSMS(mobile, otp);
+    res.json({ message: "Reset OTP sent successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
-    console.log(`Resent OTP for ${mobile} : ${otp}`);
+// ---------------- VERIFY RESET OTP ----------------
+export const verifyResetOtp = async (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+    const user = await User.findOne({ mobile });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.json({ message: "OTP resent successfully" });
+    if (user.resetOtp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+    if (user.resetOtpExpiry < Date.now()) return res.status(400).json({ message: "OTP expired" });
+
+    res.json({ message: "OTP verified" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ---------------- RESET PASSWORD ----------------
+export const resetPassword = async (req, res) => {
+  try {
+    const { mobile, newPassword } = req.body;
+    const user = await User.findOne({ mobile });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetOtp = null;
+    user.resetOtpExpiry = null;
+    await user.save();
+    res.json({ message: "Password reset successful" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
