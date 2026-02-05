@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// Card Schema
 const cardSchema = new mongoose.Schema(
   {
     title: {
@@ -14,27 +15,30 @@ const cardSchema = new mongoose.Schema(
       type: String, // card image path
       default: "/images/placeholder.png",
     },
-    alt: {
-      type: String,
-    },
+    alt: String,
   },
   { _id: false }
 );
 
+// Info Section Schema
 const infoSectionSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true,
+    required: function () {
+      // Only required if the parent object exists (infoSection provided)
+      return !!this;
+    },
   },
   subtitle: String,
   description: String,
   image: {
-    type: String, // section image path
+    type: String,
     default: "/images/placeholder.png",
   },
   cards: [cardSchema],
 });
 
+// Category Schema
 const categorySchema = new mongoose.Schema(
   {
     categoryKey: {
@@ -44,22 +48,20 @@ const categorySchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-
     pageTitle: {
       type: String,
       required: true,
     },
-
     pageSubtitle: String,
-
     description: String,
-
     image: {
       type: String, // main category image path
       default: "/images/placeholder.png",
     },
-
-    infoSection: infoSectionSchema,
+    infoSection: {
+      type: infoSectionSchema,
+      required: false, // optional, so categories without infoSection work
+    },
   },
   { timestamps: true }
 );
