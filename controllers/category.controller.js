@@ -13,7 +13,6 @@ const mapFiles = (files = []) => {
 
 const deleteFile = (filePath) => {
   if (!filePath || filePath.includes("placeholder")) return;
-
   const fullPath = path.join("uploads/category", path.basename(filePath));
   fs.unlink(fullPath, (err) => {
     if (err) console.log("Delete failed:", err.message);
@@ -23,19 +22,28 @@ const deleteFile = (filePath) => {
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
   try {
-    const { categoryKey, pageTitle, pageSubtitle, description, infoSection } = req.body;
+    const {
+      categoryKey,
+      pageTitle,
+      pageSubtitle = "",
+      description = "",
+      status = "active", // active/inactive dropdown
+      infoSection,
+    } = req.body;
 
     if (!categoryKey || !pageTitle) {
       return res.status(400).json({ message: "categoryKey & pageTitle required" });
     }
 
-    // Check duplicate categoryKey
-    const exists = await Category.findOne({ categoryKey: categoryKey.toLowerCase() });
+    // Check duplicate
+    const exists = await Category.findOne({
+      categoryKey: categoryKey.toLowerCase(),
+    });
     if (exists) return res.status(400).json({ message: "Category already exists" });
 
     const fileMap = mapFiles(req.files);
 
-    // ===== INFO SECTION PARSING =====
+    // ===== INFO SECTION =====
     let parsedInfoSection = null;
     if (infoSection) {
       parsedInfoSection = typeof infoSection === "string" ? JSON.parse(infoSection) : infoSection;
@@ -61,9 +69,10 @@ export const createCategory = async (req, res) => {
       categoryKey: categoryKey.toLowerCase(),
       pageTitle,
       pageSubtitle,
-      description,
+      description, // main description
+      status,      // active/inactive
       image: fileMap["image"] || req.body.image || "/images/placeholder.png",
-      infoSection: parsedInfoSection, // either object or null
+      infoSection: parsedInfoSection, // optional
     });
 
     res.status(201).json(category);
@@ -129,6 +138,10 @@ export const updateCategory = async (req, res) => {
         cards,
       };
     }
+
+    // Ensure status & description are updated
+    if (!updateData.status) updateData.status = category.status || "active";
+    if (!updateData.description) updateData.description = category.description || "";
 
     const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(updated);
