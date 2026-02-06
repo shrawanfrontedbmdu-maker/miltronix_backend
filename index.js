@@ -19,7 +19,7 @@ import blogRoutes from './routes/blog.routes.js';
 import roleRoutes from './routes/roles.routes.js';
 import cartRoutes from './routes/cart.routes.js';
 import healthRoutes from './routes/apihealth.route.js';
-import wishlishRoutes from "./routes/wishlish.route.js";
+import wishlistRoutes from "./routes/wishlist.routes.js";
 // import brandRouter from "./routes/brand.routes.js";
 
 const app = express();
@@ -65,7 +65,7 @@ app.use("/api/blogs", blogRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api", healthRoutes);
-app.use("/api/wishlish", wishlishRoutes);
+app.use("/api/wishlist", wishlistRoutes);
 
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
