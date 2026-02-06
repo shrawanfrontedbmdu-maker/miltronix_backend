@@ -41,7 +41,7 @@ app.use((req, res, next) => {
 });
 
 // Static uploads folder
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ------------------- WELCOME ROUTE -------------------
 app.get("/", (req, res) => {
