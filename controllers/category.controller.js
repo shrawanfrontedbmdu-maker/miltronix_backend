@@ -1,23 +1,5 @@
 import Category from "../models/category.model.js";
-import fs from "fs";
-import path from "path";
-
-// ================= HELPERS =================
-const mapFiles = (files = []) => {
-  const map = {};
-  files.forEach((file) => {
-    map[file.fieldname] = `/uploads/category/${file.filename}`;
-  });
-  return map;
-};
-
-const deleteFile = (filePath) => {
-  if (!filePath || filePath.includes("placeholder")) return;
-  const fullPath = path.join("uploads/category", path.basename(filePath));
-  fs.unlink(fullPath, (err) => {
-    if (err) console.log("Delete failed:", err.message);
-  });
-};
+import { uploadToCloud } from "../config/cloudinary.js";
 
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
@@ -27,52 +9,54 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle = "",
       description = "",
-      status = "active", // active/inactive dropdown
+      status = "active",
       infoSection,
     } = req.body;
 
-    if (!categoryKey || !pageTitle) {
+    if (!categoryKey || !pageTitle)
       return res.status(400).json({ message: "categoryKey & pageTitle required" });
-    }
 
-    // Check duplicate
-    const exists = await Category.findOne({
-      categoryKey: categoryKey.toLowerCase(),
-    });
+    const exists = await Category.findOne({ categoryKey: categoryKey.toLowerCase() });
     if (exists) return res.status(400).json({ message: "Category already exists" });
 
-    const fileMap = mapFiles(req.files);
-
-    // ===== INFO SECTION =====
-    let parsedInfoSection = null;
-    if (infoSection) {
-      parsedInfoSection = typeof infoSection === "string" ? JSON.parse(infoSection) : infoSection;
-
-      // Parse cards
-      const cards = (parsedInfoSection.cards || []).map((c, idx) => ({
-        title: c.title,
-        description: c.description,
-        image: fileMap[`infoSection[cards][${idx}][image]`] || c.image || "/images/placeholder.png",
-      }));
-
-      parsedInfoSection = {
-        title: parsedInfoSection.title,
-        subtitle: parsedInfoSection.subtitle || "",
-        description: parsedInfoSection.description || "",
-        image: fileMap["infoSection[image]"] || parsedInfoSection.image || "/images/placeholder.png",
-        cards,
-      };
+    // Main category image
+    let imageUrl = "/images/placeholder.png";
+    if (req.files?.image) {
+      const result = await uploadToCloud(req.files.image[0].buffer, "categories");
+      imageUrl = result.secure_url;
     }
 
-    // ===== CREATE CATEGORY =====
+    // InfoSection processing
+    let parsedInfoSection = infoSection ? JSON.parse(infoSection) : null;
+
+    if (parsedInfoSection) {
+      // InfoSection image
+      if (req.files?.infoSectionImage) {
+        const result = await uploadToCloud(req.files.infoSectionImage[0].buffer, "categories");
+        parsedInfoSection.image = result.secure_url;
+      }
+
+      // Cards images
+      parsedInfoSection.cards = parsedInfoSection.cards || [];
+      for (let i = 0; i < parsedInfoSection.cards.length; i++) {
+        const cardKey = `cards[${i}][image]`;
+        if (req.files?.[cardKey]) {
+          const result = await uploadToCloud(req.files[cardKey][0].buffer, "categories");
+          parsedInfoSection.cards[i].image = result.secure_url;
+        } else {
+          parsedInfoSection.cards[i].image = parsedInfoSection.cards[i].image || "/images/placeholder.png";
+        }
+      }
+    }
+
     const category = await Category.create({
       categoryKey: categoryKey.toLowerCase(),
       pageTitle,
       pageSubtitle,
-      description, // main description
-      status,      // active/inactive
-      image: fileMap["image"] || req.body.image || "/images/placeholder.png",
-      infoSection: parsedInfoSection, // optional
+      description,
+      status,
+      image: imageUrl,
+      infoSection: parsedInfoSection,
     });
 
     res.status(201).json(category);
@@ -82,7 +66,7 @@ export const createCategory = async (req, res) => {
   }
 };
 
-// ================= GET ALL =================
+// ================= GET ALL CATEGORIES =================
 export const getCategories = async (req, res) => {
   try {
     const categories = await Category.find();
@@ -92,7 +76,7 @@ export const getCategories = async (req, res) => {
   }
 };
 
-// ================= GET BY ID =================
+// ================= GET CATEGORY BY ID =================
 export const getCategoryById = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
@@ -103,43 +87,48 @@ export const getCategoryById = async (req, res) => {
   }
 };
 
-// ================= UPDATE =================
+// ================= UPDATE CATEGORY =================
 export const updateCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
 
-    const fileMap = mapFiles(req.files);
     const updateData = { ...req.body };
 
     // Main image
-    if (fileMap["image"]) {
-      deleteFile(category.image);
-      updateData.image = fileMap["image"];
+    if (req.files?.image) {
+      const result = await uploadToCloud(req.files.image[0].buffer, "categories");
+      updateData.image = result.secure_url;
     }
 
     // InfoSection
     if (updateData.infoSection) {
-      const info = typeof updateData.infoSection === "string"
-        ? JSON.parse(updateData.infoSection)
-        : updateData.infoSection;
+      const info = typeof updateData.infoSection === "string" ? JSON.parse(updateData.infoSection) : updateData.infoSection;
 
-      const cards = (info.cards || []).map((c, idx) => ({
-        title: c.title,
-        description: c.description,
-        image: fileMap[`infoSection[cards][${idx}][image]`] || c.image || "/images/placeholder.png",
-      }));
+      // InfoSection image
+      if (req.files?.infoSectionImage) {
+        const result = await uploadToCloud(req.files.infoSectionImage[0].buffer, "categories");
+        info.image = result.secure_url;
+      } else {
+        info.image = info.image || category.infoSection?.image || "/images/placeholder.png";
+      }
 
-      updateData.infoSection = {
-        title: info.title,
-        subtitle: info.subtitle || "",
-        description: info.description || "",
-        image: fileMap["infoSection[image]"] || info.image || category.infoSection?.image || "/images/placeholder.png",
-        cards,
-      };
+      // Cards
+      info.cards = info.cards || [];
+      for (let i = 0; i < info.cards.length; i++) {
+        const cardKey = `cards[${i}][image]`;
+        if (req.files?.[cardKey]) {
+          const result = await uploadToCloud(req.files[cardKey][0].buffer, "categories");
+          info.cards[i].image = result.secure_url;
+        } else {
+          info.cards[i].image = info.cards[i].image || category.infoSection?.cards[i]?.image || "/images/placeholder.png";
+        }
+      }
+
+      updateData.infoSection = info;
     }
 
-    // Ensure status & description are updated
+    // Ensure status & description are preserved if not updated
     if (!updateData.status) updateData.status = category.status || "active";
     if (!updateData.description) updateData.description = category.description || "";
 
@@ -151,15 +140,11 @@ export const updateCategory = async (req, res) => {
   }
 };
 
-// ================= DELETE =================
+// ================= DELETE CATEGORY =================
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
-
-    deleteFile(category.image);
-    deleteFile(category.infoSection?.image);
-    category.infoSection?.cards?.forEach((c) => deleteFile(c.image));
 
     await category.deleteOne();
     res.json({ message: "Deleted successfully" });
