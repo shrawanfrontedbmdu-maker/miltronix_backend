@@ -1,16 +1,56 @@
 import ServiceRequest from "../models/serviceRequest.model.js";
 
+// export const createServiceRequest = async (req, res) => {
+//   try {
+//     const { title, description, priority, type, orderId } = req.body;
+
+//     const newServiceRequest = new ServiceRequest({
+//       title,
+//       description,
+//       priority,
+//       type,
+//       orderId,
+//       user: "6891f10b2e34ae607bbba890",
+//     });
+
+//     await newServiceRequest.save();
+
+//     res.status(201).json({
+//       message: "Service request created successfully.",
+//       data: newServiceRequest,
+//     });
+//   } catch (error) {
+//     console.error("Error creating service request:", error);
+//     res.status(500).json({
+//       message: "Couldn't create service request",
+//       error: error.message,
+//     });
+//   }
+// };
 export const createServiceRequest = async (req, res) => {
   try {
-    const { title, description, priority, type, orderId } = req.body;
-
-    const newServiceRequest = new ServiceRequest({
-      title,
+    const {
+      productname,
       description,
       priority,
       type,
       orderId,
-      user: "6891f10b2e34ae607bbba890",
+      paymentdetails,
+      status,
+      assignedTo,
+    } = req.body;
+
+    const newServiceRequest = new ServiceRequest({
+      productname,
+      description,
+      priority,
+      type,
+      orderId,
+      paymentdetails,
+      status: status || "open",
+      assignedTo: assignedTo || "",
+      user: "6891f10b2e34ae607bbba890", // temp static user
+      updatedAt: Date.now(),
     });
 
     await newServiceRequest.save();
@@ -27,6 +67,7 @@ export const createServiceRequest = async (req, res) => {
     });
   }
 };
+
 export const getServiceRequestById = async (req, res) => {
   try {
     const serviceRequest = await ServiceRequest.findById(req.params.id)
@@ -63,39 +104,99 @@ export const getServiceRequests = async (req, res) => {
   }
 };
 
+// export const updateServiceRequest = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { title, description, priority, type, status } = req.body;
+
+//     const updatedServiceRequest = await ServiceRequest.findByIdAndUpdate(
+//       id,
+//       {
+//         title,
+//         description,
+//         priority,
+//         type,
+//         status,
+//       },
+//       { new: true }
+//     );
+
+//     if (!updatedServiceRequest) {
+//       return res.status(404).json({ message: "Service request not found" });
+//     }
+
+//     res.status(200).json({
+//       message: "Service request updated successfully",
+//       data: updatedServiceRequest,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Couldn't update service request",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const updateServiceRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, priority, type, status } = req.body;
 
-    const updatedServiceRequest = await ServiceRequest.findByIdAndUpdate(
-      id,
-      {
-        title,
-        description,
-        priority,
-        type,
-        status,
-      },
-      { new: true }
-    );
-
-    if (!updatedServiceRequest) {
+    const existingRequest = await ServiceRequest.findById(id);
+    if (!existingRequest) {
       return res.status(404).json({ message: "Service request not found" });
     }
 
+    // Allowed values for validation
+    const allowedStatus = ["open", "in progress", "resolved", "closed"];
+    const allowedPriority = ["low", "medium", "high", "critical"];
+    const allowedType = ["demo", "repair", "relocation", "installation", "delivery"];
+
+    // Convert incoming values to lowercase for validation
+    const status = req.body.status ? String(req.body.status).toLowerCase() : undefined;
+    const priority = req.body.priority ? String(req.body.priority).toLowerCase() : undefined;
+    const type = req.body.type ? String(req.body.type).toLowerCase() : undefined;
+
+    // Validate enum fields
+    if (status && !allowedStatus.includes(status)) {
+      return res.status(400).json({ message: `Invalid status value. Allowed: ${allowedStatus.join(", ")}` });
+    }
+
+    if (priority && !allowedPriority.includes(priority)) {
+      return res.status(400).json({ message: `Invalid priority value. Allowed: ${allowedPriority.join(", ")}` });
+    }
+
+    if (type && !allowedType.includes(type)) {
+      return res.status(400).json({ message: `Invalid type value. Allowed: ${allowedType.join(", ")}` });
+    }
+
+    // Update only provided fields, else keep existing
+    existingRequest.productname = req.body.productname ?? existingRequest.productname;
+    existingRequest.description = req.body.description ?? existingRequest.description;
+    existingRequest.priority = priority ?? existingRequest.priority;
+    existingRequest.type = type ?? existingRequest.type;
+    existingRequest.status = status ?? existingRequest.status;
+    existingRequest.paymentdetails = req.body.paymentdetails ?? existingRequest.paymentdetails;
+    existingRequest.assignedTo = req.body.assignedTo ?? existingRequest.assignedTo;
+    existingRequest.orderId = req.body.orderId ?? existingRequest.orderId;
+    existingRequest.resolution = req.body.resolution ?? existingRequest.resolution;
+
+    existingRequest.updatedAt = Date.now();
+
+    await existingRequest.save();
+
     res.status(200).json({
       message: "Service request updated successfully",
-      data: updatedServiceRequest,
+      data: existingRequest,
     });
+
   } catch (error) {
+    console.error("Update Service Request Error:", error);
     res.status(500).json({
       message: "Couldn't update service request",
       error: error.message,
     });
   }
 };
-
 export const deleteServiceRequest = async (req, res) => {
   try {
     const { id } = req.params;

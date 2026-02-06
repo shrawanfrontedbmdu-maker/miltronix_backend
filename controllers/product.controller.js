@@ -1,143 +1,145 @@
 import Product from "../models/product.model.js";
 import { uploadImage } from "../utils/cloudinary.js";
+import { generateProductSlug } from "../Slugcontroller/blogSlug.js"
+import slugify from "slugify";
 
-export const createProduct = async (req, res) => {
-  try {
-    const {
-      name,
-      slug,
-      description,
-      category,
+// export const createProduct = async (req, res) => {
+//   try {
+//     const {
+//       name,
+//       slug,
+//       description,
+//       category,
 
-      price,
-      sellingprice,
-      mrp,
-      discountPrice,
+//       price,
+//       sellingprice,
+//       mrp,
+//       discountPrice,
 
-      sku,
-      productcode,
+//       sku,
+//       productcode,
 
-      colour,
-      size,
-      variants,
-      brand,
-      specification,
+//       colour,
+//       size,
+//       variants,
+//       brand,
+//       specification,
 
-      stockStatus,
-      stockQuantity,
+//       stockStatus,
+//       stockQuantity,
 
-      weight,
-      dimensions,
+//       weight,
+//       dimensions,
 
-      tag,
-      tags,
+//       tag,
+//       tags,
 
-      warranty,
-      returnPolicy,
+//       warranty,
+//       returnPolicy,
 
-      barcode,
-      hsnCode,
+//       barcode,
+//       hsnCode,
 
-      supplier,   // array
-      shipping,   // array
+//       supplier,   // array
+//       shipping,   // array
 
-      isActive,
-      status
-    } = req.body;
+//       isActive,
+//       status
+//     } = req.body;
 
-    //  Required validations (schema ke hisaab se)
-    if (
-      !name ||
-      !description ||
-      !category ||
-      !sellingprice ||
-      !warranty ||
-      !returnPolicy ||
-      !hsnCode
-    ) {
-      return res.status(400).json({
-        message:
-          "name, description, category, sellingprice, warranty, returnPolicy, hsnCode are required"
-      });
-    }
+//     //  Required validations (schema ke hisaab se)
+//     if (
+//       !name ||
+//       !description ||
+//       !category ||
+//       !sellingprice ||
+//       !warranty ||
+//       !returnPolicy ||
+//       !hsnCode
+//     ) {
+//       return res.status(400).json({
+//         message:
+//           "name, description, category, sellingprice, warranty, returnPolicy, hsnCode are required"
+//       });
+//     }
 
-    //  Image validation
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        message: "At least one image file is required"
-      });
-    }
+//     //  Image validation
+//     if (!req.files || req.files.length === 0) {
+//       return res.status(400).json({
+//         message: "At least one image file is required"
+//       });
+//     }
 
-    // ☁️
-    const uploadPromises = req.files.map((file) =>
-      uploadImage(file.buffer)
-    );
-    const uploadResults = await Promise.all(uploadPromises);
+//     // ☁️
+//     const uploadPromises = req.files.map((file) =>
+//       uploadImage(file.buffer)
+//     );
+//     const uploadResults = await Promise.all(uploadPromises);
 
-    const images = uploadResults.map((result) => ({
-      url: result.secure_url,
-      public_id: result.public_id
-    }));
+//     const images = uploadResults.map((result) => ({
+//       url: result.secure_url,
+//       public_id: result.public_id
+//     }));
 
-    // 🧩 Create Product
-    const newProduct = await Product.create({
-      name,
-      slug,
-      description,
-      category,
+//     // 🧩 Create Product
+//     const newProduct = await Product.create({
+//       name,
+//       slug,
+//       description,
+//       category,
 
-      images,
+//       images,
 
-      price,
-      sellingprice,
-      mrp,
-      discountPrice,
+//       price,
+//       sellingprice,
+//       mrp,
+//       discountPrice,
 
-      sku,
-      productcode,
+//       sku,
+//       productcode,
 
-      colour,
-      size,
-      variants,
-      brand,
-      specification,
+//       colour,
+//       size,
+//       variants,
+//       brand,
+//       specification,
 
-      stockStatus,
-      stockQuantity: stockQuantity || 0,
+//       stockStatus,
+//       stockQuantity: stockQuantity || 0,
 
-      weight,
-      dimensions,
+//       weight,
+//       dimensions,
 
-      tag,
-      tags,
+//       tag,
+//       tags,
 
-      warranty,
-      returnPolicy,
+//       warranty,
+//       returnPolicy,
 
-      barcode,
-      hsnCode,
+//       barcode,
+//       hsnCode,
 
-      supplier: supplier ? supplier : [],
-      shipping: shipping ? shipping : [],
+//       supplier: supplier ? supplier : [],
+//       shipping: shipping ? shipping : [],
 
-      isActive,
-      status
-    });
+//       isActive,
+//       status
+//     });
 
-    return res.status(201).json({
-      success: true,
-      message: "Product created successfully",
-      product: newProduct
-    });
-  } catch (error) {
-    console.log(error.message);
-    return res.status(500).json({
-      success: false,
-      message: "Error creating Product",
-      error: error.message,
-    });
-  }
-};
+//     return res.status(201).json({
+//       success: true,
+//       message: "Product created successfully",
+//       product: newProduct
+//     });
+//   } catch (error) {
+//     console.log(error.message);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Error creating Product",
+//       error: error.message,
+//     });
+//   }
+// };
 export const getProducts = async (req, res) => {
   try {
     const { search, category, minPrice, maxPrice, stockStatus } = req.query;
@@ -173,6 +175,115 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const createProduct = async (req, res) => {
+  try {
+    const {
+      name,
+      slug,
+      description,
+      category,
+      price,
+      sellingprice,
+      mrp,
+      discountPrice,
+      sku,
+      productcode,
+      colour,
+      size,
+      variants,
+      brand,
+      specification,
+      stockStatus,
+      stockQuantity,
+      weight,
+      dimensions,
+      tag,
+      tags,
+      warranty,
+      returnPolicy,
+      barcode,
+      hsnCode,
+      supplier,
+      shipping,
+      isActive,
+      status
+    } = req.body;
+
+    // Required validations
+    if (!name || !description || !category || !sellingprice || !warranty || !returnPolicy || !hsnCode) {
+      return res.status(400).json({
+        message: "name, description, category, sellingprice, warranty, returnPolicy, hsnCode are required"
+      });
+    }
+
+    // Image validation
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        message: "At least one image file is required"
+      });
+    }
+
+    // Upload images ☁️
+    const uploadPromises = req.files.map(file => uploadImage(file.buffer));
+    const uploadResults = await Promise.all(uploadPromises);
+
+    const images = uploadResults.map(result => ({
+      url: result.secure_url,
+      public_id: result.public_id
+    }));
+
+    // Generate slug
+    let finalSlug = slug && slug.trim() !== "" ? slugify(slug, { lower: true, strict: true }) : await generateProductSlug(Product, name);
+
+    // Create Product 🧩
+    const newProduct = await Product.create({
+      name,
+      slug: finalSlug,
+      description,
+      category,
+      images,
+      price,
+      sellingprice,
+      mrp,
+      discountPrice,
+      sku,
+      productcode,
+      colour,
+      size,
+      variants,
+      brand,
+      specification,
+      stockStatus,
+      stockQuantity: stockQuantity || 0,
+      weight,
+      dimensions,
+      tag,
+      tags,
+      warranty,
+      returnPolicy,
+      barcode,
+      hsnCode,
+      supplier: supplier ? supplier : [],
+      shipping: shipping ? shipping : [],
+      isActive,
+      status
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      product: newProduct
+    });
+
+  } catch (error) {
+    console.error("Error creating product:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error creating product",
+      error: error.message
+    });
+  }
+};
 // export const updateProduct = async (req, res) => {
 // try {
 //   const { id } = req.params;

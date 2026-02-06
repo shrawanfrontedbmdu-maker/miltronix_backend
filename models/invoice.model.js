@@ -1,48 +1,82 @@
 import mongoose from "mongoose";
 
-const invoiceItemSchema = new mongoose.Schema({
-  description: { type: String, required: true },
-  quantity: { type: Number, required: true, min: 1 },
-  unitPrice: { type: Number, required: true, min: 0 },
-  total: {type: Number,required: true,default: 0,
+const invoiceItemSchema = new mongoose.Schema(
+  {
+    description: { type: String, required: true },
+    quantity: { type: Number, required: true, min: 1 },
+    unitPrice: { type: Number, required: true, min: 0 },
+    total: { type: Number, default: 0 },
   },
-});
+  { _id: false }
+);
 
 const invoiceSchema = new mongoose.Schema(
   {
-    invoiceNumber: { type: String, required: true, unique: true },
+    // 🔗 One-to-One with Order
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      required: true,
+      unique: true, // 🔥 no duplicate invoice per order
+    },
+
+    invoiceNumber: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
     customer: {
       name: { type: String, required: true },
-      email: { type: String },
-      address: { type: String },
-      company:{type:String},
-      phone:{type:Number},
-      address:{type:String},
-      city:{type:String}
+      email: String,
+      phone: String,
+      company: String,
+      address: String,
+      city: String,
     },
+    invoicedate: {
+      type: Date
+    },
+
     items: [invoiceItemSchema],
+
     subtotal: { type: Number, default: 0 },
-    tax: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 }, // ₹
+    taxPercent: { type: Number, default: 0 }, // %
     total: { type: Number, default: 0 },
-    dueDate: { type: Date },
+    discount: { type: Number, default: 0 },
+    dueDate: { type: Date, default: Date.now() },
+    paidamount: { type: Number, default: 0 },
+    dueamount: { type: Number, default: 0 },
     status: {
       type: String,
       enum: ["draft", "sent", "paid", "overdue"],
       default: "draft",
     },
-    notes: { type: String },
-    termsAndConditions: { type: String },
+
+    notes: String,
+    termsAndConditions: String,
   },
   { timestamps: true }
 );
 
-invoiceSchema.pre("save", function (next) {
-  this.items.forEach((item) => {
+invoiceSchema.pre(["save", "findOneAndUpdate"], function (next) {
+  const doc = this._update ? this._update : this;
+
+  if (!doc.items) return next();
+
+  doc.items.forEach((item) => {
     item.total = item.quantity * item.unitPrice;
   });
 
-  this.subtotal = this.items.reduce((acc, item) => acc + item.total, 0);
-  this.total = this.subtotal + this.tax;
+  doc.subtotal = doc.items.reduce((sum, i) => sum + i.total, 0);
+
+  doc.taxAmount = doc.taxPercent
+    ? (doc.subtotal * doc.taxPercent) / 100
+    : doc.taxAmount || 0;
+
+  doc.total = doc.subtotal + doc.taxAmount;
+
   next();
 });
 

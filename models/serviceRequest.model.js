@@ -1,11 +1,7 @@
 import mongoose from "mongoose";
 
 const serviceRequestSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-  },
-  description: {
+  productname: {
     type: String,
     required: true,
   },
@@ -32,6 +28,14 @@ const serviceRequestSchema = new mongoose.Schema({
     type: String,
     enum: ["open", "in progress", "completed"],
     default: "open",
+  },
+  description: {
+    type: String,
+    required: true,
+  },
+  paymentdetails:{
+    type:String,
+    required:true
   },
   createdAt: {
     type: Date,

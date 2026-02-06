@@ -203,7 +203,6 @@ export const getOrdersThisYear = async (req, res) => {
     });
   }
 };
-
 export const editOrderById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -256,7 +255,6 @@ export const editOrderById = async (req, res) => {
     });
   }
 };
-
 export const deleteOrderById = async (req, res) => {
   try {
     const { id } = req.params;

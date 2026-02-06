@@ -52,3 +52,18 @@ export const uploadBannerImage = (fileBuffer) => {
     ).end(fileBuffer);
   });
 };
+
+export const uploadProfileImage = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      {
+        folder: "admin_profiles",
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    ).end(fileBuffer);
+  });
+};

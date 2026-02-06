@@ -7,23 +7,139 @@ import dotenv from "dotenv";
 import twilio from "twilio";
 import otp from "../models/otp.model.js"
 import penddinguser from '../models/panddinguserschema.js';
+import Admin from "../models/admin.model.js";
+import BlacklistToken from "../models/blacklistadmintokan.model.js";
+
 
 dotenv.config();
 
 export const adminLogin = async (req, res) => {
-  const { email, password } = req.body;
-  if (
-    email === process.env.ADMIN_ID &&
-    password === process.env.ADMIN_PASSWORD
-  ) {
-    const token = jwt.sign({ email, role: "admin" }, process.env.JWT_SECRET, {
-      expiresIn: "1d",
-    });
-    return res.json({ token });
+  try {
+    const { email, password } = req.body;
+
+    const admin = await Admin.findOne({ email }).select("+password");
+    if (!admin) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    if (!admin.isActive) {
+      return res.status(403).json({ message: "Admin account is disabled" });
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    admin.lastLogin = new Date();
+    await admin.save();
+
+    const token = jwt.sign(
+      { id: admin._id, role: admin.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ message: "Login failed", error: error.message });
   }
-  return res.status(401).json({ message: "Invalid credentials" });
 };
 
+export const updateAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+    const { name, email, password } = req.body;
+
+    const admin = await Admin.findById(adminId).select("+password");
+    if (!admin) return res.status(404).json({ message: "Admin not found" });
+
+    if (name) admin.name = name;
+    if (email) admin.email = email;
+    if (password) admin.password = password;
+
+    await admin.save();
+
+    res.json({ message: "Profile updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Update failed", error: error.message });
+  }
+};
+
+export const createAdmin = async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Name, email and password are required" });
+    }
+
+    // if (req.admin.role !== "admin") {
+    //   return res.status(403).json({ message: "Only superadmin can create admins" });
+    // }
+
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(409).json({ message: "Admin with this email already exists" });
+    }
+
+    const admin = await Admin.create({
+      name,
+      email,
+      password,
+      role: role || "admin",
+    });
+
+    res.status(201).json({
+      message: "Admin created successfully",
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Admin creation failed", error: error.message });
+  }
+};
+
+export const adminLogout = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token) return res.status(400).json({ message: "Token missing" });
+
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await BlacklistToken.create({ token, expiresAt: expiry });
+
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Logout failed", error: error.message });
+  }
+};
+
+export const adminForgotPassword = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and new password are required" });
+    }
+
+    const admin = await Admin.findOne({ email }).select("+password");
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    admin.password = password;
+    await admin.save();
+
+    res.status(200).json({ message: "Password updated successfully" });
+
+  } catch (error) {
+    res.status(500).json({ message: "Password reset failed", error: error.message });
+  }
+};
 const validatePhoneNumber = (phone, countryCode) => {
   try {
     const phoneNumber = parsePhoneNumberFromString(phone, countryCode);
@@ -361,8 +477,8 @@ export const resetPassword = async (req, res) => {
     if (otp !== verifyOtp) {
       return res.status(400).json({ message: "Invalid OTP" });
     }
-    const newPassword = req.body.newPassword;
-    if (!newPassword) {
+    const password = req.body.password;
+    if (!password) {
       return res.status(400).json({ message: "New password is required" });
     }
 
@@ -408,3 +524,24 @@ export const testRoute = async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 };
+
+export const getAllusers = async (req, res) => {
+  try {
+    const users = await User.find();
+    if (!users) {
+      return res.status(404).json({
+        success: false,
+        message: "User not Found"
+      })
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "User's Found Successfully...",
+      data: users
+    })
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ error: error });
+  }
+}

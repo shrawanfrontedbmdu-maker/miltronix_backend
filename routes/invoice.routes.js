@@ -8,6 +8,7 @@ import {
   getInvoicesByMonth,
   getInvoicesLastMonth,
   getInvoicesThisYear,
+  generateInvoicePDF
 } from "../controllers/invoice.controller.js";
 
 const router = express.Router();
@@ -17,6 +18,7 @@ router.post("/", createInvoice);
 router.get("/this-month", getInvoicesByMonth);
 router.get("/last-month", getInvoicesLastMonth);
 router.get("/this-year", getInvoicesThisYear);
+router.get("/generateinvoice/:id",generateInvoicePDF);
 router.get("/:id", getInvoiceById);
 router.put("/:id", updateInvoiceById);
 router.delete("/:id", deleteInvoiceById);
