@@ -10,7 +10,10 @@ const router = express.Router();
 
 router.post("/add", addWishlistItem);
 router.get("/:userId", getWishlistByUser);
-router.delete("/:userId/:itemId", removeWishlistItem);
+
+// ⚠️ clear route must come BEFORE :userId/:itemId
 router.delete("/clear/:userId", clearWishlist);
+
+router.delete("/:userId/:itemId", removeWishlistItem);
 
 export default router;
