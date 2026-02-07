@@ -7,19 +7,15 @@ import {
   deleteCategory,
 } from "../controllers/category.controller.js";
 
-import  {upload} from "../middlewares/uploadcategory.js";
+import { upload } from "../middlewares/uploadcategory.js";
 
 const router = express.Router();
 
 // ================= CREATE CATEGORY =================
-// supports:
-// - category image
-// - product images
-// - info section image
-// - info card images
+// - category image only
 router.post(
   "/",
-  upload.any(), // 🔥 multiple images support
+  upload.single("image"),
   createCategory
 );
 
@@ -33,7 +29,7 @@ router.get("/:id", getCategoryById);
 // supports image replace
 router.put(
   "/:id",
-  upload.any(), // 🔥 image edit support
+  upload.single("image"),
   updateCategory
 );
 

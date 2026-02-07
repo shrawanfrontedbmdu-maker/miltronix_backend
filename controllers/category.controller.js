@@ -14,17 +14,19 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle = "",
       description = "",
-      infoSection,
     } = req.body;
 
     if (!categoryKey || !pageTitle) {
-      return res.status(400).json({ message: "categoryKey & pageTitle required" });
+      return res
+        .status(400)
+        .json({ message: "categoryKey & pageTitle required" });
     }
 
     const exists = await Category.findOne({
       categoryKey: categoryKey.toLowerCase(),
     });
-    if (exists) return res.status(400).json({ message: "Category already exists" });
+    if (exists)
+      return res.status(400).json({ message: "Category already exists" });
 
     console.log("FILES:", req.files);
 
@@ -37,43 +39,12 @@ export const createCategory = async (req, res) => {
       imageUrl = result.secure_url;
     }
 
-    // ===== INFO SECTION =====
-    let parsedInfoSection = infoSection ? JSON.parse(infoSection) : null;
-
-    if (parsedInfoSection) {
-      // infoSection image
-      const infoImage = getFileByField(req.files, "infoSectionImage");
-      if (infoImage) {
-        const result = await uploadToCloud(infoImage.buffer, "categories");
-        parsedInfoSection.image = result.secure_url;
-      } else {
-        parsedInfoSection.image =
-          parsedInfoSection.image || "/images/placeholder.png";
-      }
-
-      // cards
-      parsedInfoSection.cards = parsedInfoSection.cards || [];
-
-      for (let i = 0; i < parsedInfoSection.cards.length; i++) {
-        const cardFile = getFileByField(req.files, `cards[${i}][image]`);
-
-        if (cardFile) {
-          const result = await uploadToCloud(cardFile.buffer, "categories");
-          parsedInfoSection.cards[i].image = result.secure_url;
-        } else {
-          parsedInfoSection.cards[i].image =
-            parsedInfoSection.cards[i].image || "/images/placeholder.png";
-        }
-      }
-    }
-
     const category = await Category.create({
       categoryKey: categoryKey.toLowerCase(),
       pageTitle,
       pageSubtitle,
       description,
       image: imageUrl,
-      infoSection: parsedInfoSection,
     });
 
     res.status(201).json(category);
@@ -122,41 +93,6 @@ export const updateCategory = async (req, res) => {
     if (mainImage) {
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
-    }
-
-    // ===== INFO SECTION =====
-    if (updateData.infoSection) {
-      const info =
-        typeof updateData.infoSection === "string"
-          ? JSON.parse(updateData.infoSection)
-          : updateData.infoSection;
-
-      const infoImage = getFileByField(req.files, "infoSectionImage");
-      if (infoImage) {
-        const result = await uploadToCloud(infoImage.buffer, "categories");
-        info.image = result.secure_url;
-      } else {
-        info.image =
-          info.image || category.infoSection?.image || "/images/placeholder.png";
-      }
-
-      info.cards = info.cards || [];
-
-      for (let i = 0; i < info.cards.length; i++) {
-        const cardFile = getFileByField(req.files, `cards[${i}][image]`);
-
-        if (cardFile) {
-          const result = await uploadToCloud(cardFile.buffer, "categories");
-          info.cards[i].image = result.secure_url;
-        } else {
-          info.cards[i].image =
-            info.cards[i].image ||
-            category.infoSection?.cards[i]?.image ||
-            "/images/placeholder.png";
-        }
-      }
-
-      updateData.infoSection = info;
     }
 
     const updated = await Category.findByIdAndUpdate(
