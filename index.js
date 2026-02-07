@@ -21,6 +21,7 @@ import cartRoutes from './routes/cart.routes.js';
 import healthRoutes from './routes/apihealth.route.js';
 import wishlistRoutes from "./routes/wishlist.routes.js";
 // import brandRouter from "./routes/brand.routes.js";
+import infosectionRoutes from "./routes/infosection.routes.js";
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use("/api/roles", roleRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api", healthRoutes);
 app.use("/api/wishlist", wishlistRoutes);
+app.use("/api/infosections", infosectionRoutes);
 
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
