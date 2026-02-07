@@ -1,7 +1,7 @@
 import Category from "../models/category.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
-// helper to get file by fieldname
+// helper
 const getFileByField = (files, field) => {
   return files?.find((f) => f.fieldname === field);
 };
@@ -14,7 +14,6 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle = "",
       description = "",
-      status = "active",
       infoSection,
     } = req.body;
 
@@ -52,7 +51,7 @@ export const createCategory = async (req, res) => {
           parsedInfoSection.image || "/images/placeholder.png";
       }
 
-      // cards images
+      // cards
       parsedInfoSection.cards = parsedInfoSection.cards || [];
 
       for (let i = 0; i < parsedInfoSection.cards.length; i++) {
@@ -73,7 +72,6 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle,
       description,
-      status,
       image: imageUrl,
       infoSection: parsedInfoSection,
     });
@@ -85,7 +83,7 @@ export const createCategory = async (req, res) => {
   }
 };
 
-// ================= GET ALL CATEGORIES =================
+// ================= GET ALL =================
 export const getCategories = async (req, res) => {
   try {
     const categories = await Category.find();
@@ -95,7 +93,7 @@ export const getCategories = async (req, res) => {
   }
 };
 
-// ================= GET CATEGORY BY ID =================
+// ================= GET BY ID =================
 export const getCategoryById = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
@@ -133,7 +131,6 @@ export const updateCategory = async (req, res) => {
           ? JSON.parse(updateData.infoSection)
           : updateData.infoSection;
 
-      // infoSection image
       const infoImage = getFileByField(req.files, "infoSectionImage");
       if (infoImage) {
         const result = await uploadToCloud(infoImage.buffer, "categories");
@@ -143,7 +140,6 @@ export const updateCategory = async (req, res) => {
           info.image || category.infoSection?.image || "/images/placeholder.png";
       }
 
-      // cards
       info.cards = info.cards || [];
 
       for (let i = 0; i < info.cards.length; i++) {
@@ -163,10 +159,6 @@ export const updateCategory = async (req, res) => {
       updateData.infoSection = info;
     }
 
-    if (!updateData.status) updateData.status = category.status;
-    if (!updateData.description)
-      updateData.description = category.description;
-
     const updated = await Category.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -180,7 +172,7 @@ export const updateCategory = async (req, res) => {
   }
 };
 
-// ================= DELETE CATEGORY =================
+// ================= DELETE =================
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
