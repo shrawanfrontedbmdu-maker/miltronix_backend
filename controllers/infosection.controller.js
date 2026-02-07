@@ -1,18 +1,16 @@
 import InfoSection from "../models/infosection.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
-// ===== Helper: Get file by fieldname =====
-const getFileByField = (files, field) => {
-  return files?.find((f) => f.fieldname === field);
-};
+// Helper: get file by fieldname
+const getFileByField = (files, field) => files?.find(f => f.fieldname === field);
 
-// ===== Create a new InfoSection =====
+// ===== Create InfoSection =====
 export const createInfoSection = async (req, res) => {
   try {
     const { title, subtitle = "", description = "", cards = "[]" } = req.body;
     if (!title) return res.status(400).json({ message: "Title is required" });
 
-    // ===== Main Image =====
+    // Main image
     let imageUrl = "/images/placeholder.png";
     const mainImage = getFileByField(req.files, "image");
     if (mainImage) {
@@ -20,18 +18,17 @@ export const createInfoSection = async (req, res) => {
       imageUrl = result.secure_url;
     }
 
-    // ===== Cards Images =====
-    let cardsData = JSON.parse(cards); // cards must be JSON string
+    // Cards images
+    let cardsData = JSON.parse(cards);
     if (!Array.isArray(cardsData)) cardsData = [];
     for (let i = 0; i < cardsData.length; i++) {
       const cardFile = getFileByField(req.files, `cardImage_${i}`);
       if (cardFile) {
         const result = await uploadToCloud(cardFile.buffer, "infosections/cards");
-        cardsData[i].icon = result.secure_url; // aligning with schema field "icon"
+        cardsData[i].icon = result.secure_url;
       }
     }
 
-    // ===== Save to DB =====
     const infoSection = await InfoSection.create({
       title,
       subtitle,
@@ -47,25 +44,25 @@ export const createInfoSection = async (req, res) => {
   }
 };
 
-// ===== Get all InfoSections =====
+// ===== Get All InfoSections =====
 export const getAllInfoSections = async (req, res) => {
   try {
     const sections = await InfoSection.find().sort({ createdAt: -1 });
     res.status(200).json(sections);
   } catch (error) {
-    console.error("Get All InfoSections Error:", error);
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// ===== Get single InfoSection by ID =====
+// ===== Get InfoSection by ID =====
 export const getInfoSectionById = async (req, res) => {
   try {
     const section = await InfoSection.findById(req.params.id);
     if (!section) return res.status(404).json({ message: "InfoSection not found" });
     res.status(200).json(section);
   } catch (error) {
-    console.error("Get InfoSection By ID Error:", error);
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -75,14 +72,14 @@ export const updateInfoSection = async (req, res) => {
   try {
     const updateData = { ...req.body };
 
-    // ===== Main Image =====
+    // Main image
     const mainImage = getFileByField(req.files, "image");
     if (mainImage) {
       const result = await uploadToCloud(mainImage.buffer, "infosections");
       updateData.image = result.secure_url;
     }
 
-    // ===== Cards Images =====
+    // Cards images
     if (updateData.cards) {
       let cardsData = JSON.parse(updateData.cards);
       if (!Array.isArray(cardsData)) cardsData = [];
@@ -90,7 +87,7 @@ export const updateInfoSection = async (req, res) => {
         const cardFile = getFileByField(req.files, `cardImage_${i}`);
         if (cardFile) {
           const result = await uploadToCloud(cardFile.buffer, "infosections/cards");
-          cardsData[i].icon = result.secure_url; // align with schema
+          cardsData[i].icon = result.secure_url;
         }
       }
       updateData.cards = cardsData;
@@ -104,7 +101,7 @@ export const updateInfoSection = async (req, res) => {
     if (!section) return res.status(404).json({ message: "InfoSection not found" });
     res.status(200).json(section);
   } catch (error) {
-    console.error("Update InfoSection Error:", error);
+    console.error(error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -116,7 +113,7 @@ export const deleteInfoSection = async (req, res) => {
     if (!section) return res.status(404).json({ message: "InfoSection not found" });
     res.status(200).json({ message: "InfoSection deleted successfully" });
   } catch (error) {
-    console.error("Delete InfoSection Error:", error);
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
