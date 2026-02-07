@@ -67,3 +67,22 @@ export const uploadProfileImage = (fileBuffer) => {
     ).end(fileBuffer);
   });
 };
+
+export const uploadCustomerProfileImage = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      {
+        folder: "customer_profiles",
+        resource_type: "image",
+        transformation: [
+          { width: 300, height: 300, crop: "fill", gravity: "face" },
+          { quality: "auto" }
+        ],
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    ).end(fileBuffer);
+  });
+};

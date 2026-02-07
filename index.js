@@ -20,7 +20,8 @@ import healthRoutes from './routes/apihealth.route.js';
 import wishlishRoutes from "./routes/wishlish.route.js";
 import SettingRouter from "./routes/setting.route.js"
 import AdminprofileRouter from "./routes/profile.route.js";
-import CouponsRoutes from "./routes/coupons.route.js"
+import CouponsRoutes from "./routes/coupons.route.js";
+import CustomerRouter from "./routes/customer.route.js"
 
 dotenv.config();
 const app = express();
@@ -58,6 +59,7 @@ app.use("/api/wishlish", wishlishRoutes);
 app.use("/api/settings", SettingRouter);
 app.use("/api/adminprofile", AdminprofileRouter);
 app.use("/api/coupons", CouponsRoutes);
+app.use("/api/customer", CustomerRouter);
 
 app.use((err, req, res, next) => {
   console.error("Unhandled server error:", err.stack || err.message);
