@@ -27,6 +27,13 @@ const categorySchema = new mongoose.Schema(
       type: String,
       default: "/images/placeholder.png",
     },
+
+    // ✅ STATUS FIELD
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
+    },
   },
   { timestamps: true }
 );

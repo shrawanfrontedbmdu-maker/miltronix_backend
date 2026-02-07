@@ -14,6 +14,7 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle = "",
       description = "",
+      status = "active",
     } = req.body;
 
     if (!categoryKey || !pageTitle) {
@@ -22,13 +23,16 @@ export const createCategory = async (req, res) => {
         .json({ message: "categoryKey & pageTitle required" });
     }
 
+    // validate status
+    if (!["active", "inactive"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
     const exists = await Category.findOne({
       categoryKey: categoryKey.toLowerCase(),
     });
     if (exists)
       return res.status(400).json({ message: "Category already exists" });
-
-    console.log("FILES:", req.files);
 
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
@@ -45,11 +49,12 @@ export const createCategory = async (req, res) => {
       pageSubtitle,
       description,
       image: imageUrl,
+      status,
     });
 
     res.status(201).json(category);
   } catch (err) {
-    console.error(err);
+    console.error("Create Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -57,9 +62,10 @@ export const createCategory = async (req, res) => {
 // ================= GET ALL =================
 export const getCategories = async (req, res) => {
   try {
-    const categories = await Category.find();
+    const categories = await Category.find().sort({ createdAt: -1 });
     res.json(categories);
   } catch (err) {
+    console.error("Get Categories Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -73,6 +79,7 @@ export const getCategoryById = async (req, res) => {
 
     res.json(category);
   } catch (err) {
+    console.error("Get Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -86,7 +93,13 @@ export const updateCategory = async (req, res) => {
 
     const updateData = { ...req.body };
 
-    console.log("FILES:", req.files);
+    // validate status
+    if (
+      updateData.status &&
+      !["active", "inactive"].includes(updateData.status)
+    ) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
 
     // ===== MAIN IMAGE =====
     const mainImage = getFileByField(req.files, "image");
@@ -103,12 +116,12 @@ export const updateCategory = async (req, res) => {
 
     res.json(updated);
   } catch (err) {
-    console.error(err);
+    console.error("Update Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
 
-// ================= DELETE =================
+// ================= DELETE CATEGORY =================
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
@@ -118,6 +131,7 @@ export const deleteCategory = async (req, res) => {
     await category.deleteOne();
     res.json({ message: "Deleted successfully" });
   } catch (err) {
+    console.error("Delete Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
