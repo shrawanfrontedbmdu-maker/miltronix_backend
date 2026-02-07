@@ -10,21 +10,21 @@ import {
 
 const router = express.Router();
 
-// ===== Routes with image support ======
 
-// - card images: "cardImage_0", "cardImage_1", etc.
+// - Card images: "cardImage_0", "cardImage_1", ...
 router.post("/", upload.any(), createInfoSection);
 
-// Get all InfoSections
+// ===== Get all InfoSections =====
 router.get("/", getAllInfoSections);
 
-// Get single InfoSection by ID
+// ===== Get single InfoSection by ID =====
 router.get("/:id", getInfoSectionById);
 
-// Supports updating main image and card images
+
+// Supports updating main image + card images
 router.put("/:id", upload.any(), updateInfoSection);
 
-// Delete InfoSection
+// ===== Delete InfoSection =====
 router.delete("/:id", deleteInfoSection);
 
 export default router;

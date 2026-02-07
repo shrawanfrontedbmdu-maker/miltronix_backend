@@ -1,7 +1,7 @@
 import InfoSection from "../models/infosection.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
-// Helper to get file by fieldname
+// ===== Helper: Get file by fieldname =====
 const getFileByField = (files, field) => {
   return files?.find((f) => f.fieldname === field);
 };
@@ -9,8 +9,7 @@ const getFileByField = (files, field) => {
 // ===== Create a new InfoSection =====
 export const createInfoSection = async (req, res) => {
   try {
-    const { title, subtitle = "", description = "", cards = [] } = req.body;
-
+    const { title, subtitle = "", description = "", cards = "[]" } = req.body;
     if (!title) return res.status(400).json({ message: "Title is required" });
 
     // ===== Main Image =====
@@ -22,15 +21,17 @@ export const createInfoSection = async (req, res) => {
     }
 
     // ===== Cards Images =====
-    let cardsData = JSON.parse(cards || "[]"); // cards can come as JSON string
+    let cardsData = JSON.parse(cards); // cards must be JSON string
+    if (!Array.isArray(cardsData)) cardsData = [];
     for (let i = 0; i < cardsData.length; i++) {
       const cardFile = getFileByField(req.files, `cardImage_${i}`);
       if (cardFile) {
         const result = await uploadToCloud(cardFile.buffer, "infosections/cards");
-        cardsData[i].image = result.secure_url;
+        cardsData[i].icon = result.secure_url; // aligning with schema field "icon"
       }
     }
 
+    // ===== Save to DB =====
     const infoSection = await InfoSection.create({
       title,
       subtitle,
@@ -49,9 +50,10 @@ export const createInfoSection = async (req, res) => {
 // ===== Get all InfoSections =====
 export const getAllInfoSections = async (req, res) => {
   try {
-    const sections = await InfoSection.find();
+    const sections = await InfoSection.find().sort({ createdAt: -1 });
     res.status(200).json(sections);
   } catch (error) {
+    console.error("Get All InfoSections Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -63,6 +65,7 @@ export const getInfoSectionById = async (req, res) => {
     if (!section) return res.status(404).json({ message: "InfoSection not found" });
     res.status(200).json(section);
   } catch (error) {
+    console.error("Get InfoSection By ID Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -82,11 +85,12 @@ export const updateInfoSection = async (req, res) => {
     // ===== Cards Images =====
     if (updateData.cards) {
       let cardsData = JSON.parse(updateData.cards);
+      if (!Array.isArray(cardsData)) cardsData = [];
       for (let i = 0; i < cardsData.length; i++) {
         const cardFile = getFileByField(req.files, `cardImage_${i}`);
         if (cardFile) {
           const result = await uploadToCloud(cardFile.buffer, "infosections/cards");
-          cardsData[i].image = result.secure_url;
+          cardsData[i].icon = result.secure_url; // align with schema
         }
       }
       updateData.cards = cardsData;
