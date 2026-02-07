@@ -1,6 +1,11 @@
 import Category from "../models/category.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
+// helper to get file by fieldname
+const getFileByField = (files, field) => {
+  return files?.find((f) => f.fieldname === field);
+};
+
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
   try {
@@ -13,38 +18,52 @@ export const createCategory = async (req, res) => {
       infoSection,
     } = req.body;
 
-    if (!categoryKey || !pageTitle)
+    if (!categoryKey || !pageTitle) {
       return res.status(400).json({ message: "categoryKey & pageTitle required" });
+    }
 
-    const exists = await Category.findOne({ categoryKey: categoryKey.toLowerCase() });
+    const exists = await Category.findOne({
+      categoryKey: categoryKey.toLowerCase(),
+    });
     if (exists) return res.status(400).json({ message: "Category already exists" });
 
-    // Main category image
+    console.log("FILES:", req.files);
+
+    // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
-    if (req.files?.image) {
-      const result = await uploadToCloud(req.files.image[0].buffer, "categories");
+    const mainImage = getFileByField(req.files, "image");
+
+    if (mainImage) {
+      const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
 
-    // InfoSection processing
+    // ===== INFO SECTION =====
     let parsedInfoSection = infoSection ? JSON.parse(infoSection) : null;
 
     if (parsedInfoSection) {
-      // InfoSection image
-      if (req.files?.infoSectionImage) {
-        const result = await uploadToCloud(req.files.infoSectionImage[0].buffer, "categories");
+      // infoSection image
+      const infoImage = getFileByField(req.files, "infoSectionImage");
+      if (infoImage) {
+        const result = await uploadToCloud(infoImage.buffer, "categories");
         parsedInfoSection.image = result.secure_url;
+      } else {
+        parsedInfoSection.image =
+          parsedInfoSection.image || "/images/placeholder.png";
       }
 
-      // Cards images
+      // cards images
       parsedInfoSection.cards = parsedInfoSection.cards || [];
+
       for (let i = 0; i < parsedInfoSection.cards.length; i++) {
-        const cardKey = `cards[${i}][image]`;
-        if (req.files?.[cardKey]) {
-          const result = await uploadToCloud(req.files[cardKey][0].buffer, "categories");
+        const cardFile = getFileByField(req.files, `cards[${i}][image]`);
+
+        if (cardFile) {
+          const result = await uploadToCloud(cardFile.buffer, "categories");
           parsedInfoSection.cards[i].image = result.secure_url;
         } else {
-          parsedInfoSection.cards[i].image = parsedInfoSection.cards[i].image || "/images/placeholder.png";
+          parsedInfoSection.cards[i].image =
+            parsedInfoSection.cards[i].image || "/images/placeholder.png";
         }
       }
     }
@@ -80,7 +99,9 @@ export const getCategories = async (req, res) => {
 export const getCategoryById = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-    if (!category) return res.status(404).json({ message: "Category not found" });
+    if (!category)
+      return res.status(404).json({ message: "Category not found" });
+
     res.json(category);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -91,48 +112,67 @@ export const getCategoryById = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-    if (!category) return res.status(404).json({ message: "Category not found" });
+    if (!category)
+      return res.status(404).json({ message: "Category not found" });
 
     const updateData = { ...req.body };
 
-    // Main image
-    if (req.files?.image) {
-      const result = await uploadToCloud(req.files.image[0].buffer, "categories");
+    console.log("FILES:", req.files);
+
+    // ===== MAIN IMAGE =====
+    const mainImage = getFileByField(req.files, "image");
+    if (mainImage) {
+      const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
 
-    // InfoSection
+    // ===== INFO SECTION =====
     if (updateData.infoSection) {
-      const info = typeof updateData.infoSection === "string" ? JSON.parse(updateData.infoSection) : updateData.infoSection;
+      const info =
+        typeof updateData.infoSection === "string"
+          ? JSON.parse(updateData.infoSection)
+          : updateData.infoSection;
 
-      // InfoSection image
-      if (req.files?.infoSectionImage) {
-        const result = await uploadToCloud(req.files.infoSectionImage[0].buffer, "categories");
+      // infoSection image
+      const infoImage = getFileByField(req.files, "infoSectionImage");
+      if (infoImage) {
+        const result = await uploadToCloud(infoImage.buffer, "categories");
         info.image = result.secure_url;
       } else {
-        info.image = info.image || category.infoSection?.image || "/images/placeholder.png";
+        info.image =
+          info.image || category.infoSection?.image || "/images/placeholder.png";
       }
 
-      // Cards
+      // cards
       info.cards = info.cards || [];
+
       for (let i = 0; i < info.cards.length; i++) {
-        const cardKey = `cards[${i}][image]`;
-        if (req.files?.[cardKey]) {
-          const result = await uploadToCloud(req.files[cardKey][0].buffer, "categories");
+        const cardFile = getFileByField(req.files, `cards[${i}][image]`);
+
+        if (cardFile) {
+          const result = await uploadToCloud(cardFile.buffer, "categories");
           info.cards[i].image = result.secure_url;
         } else {
-          info.cards[i].image = info.cards[i].image || category.infoSection?.cards[i]?.image || "/images/placeholder.png";
+          info.cards[i].image =
+            info.cards[i].image ||
+            category.infoSection?.cards[i]?.image ||
+            "/images/placeholder.png";
         }
       }
 
       updateData.infoSection = info;
     }
 
-    // Ensure status & description are preserved if not updated
-    if (!updateData.status) updateData.status = category.status || "active";
-    if (!updateData.description) updateData.description = category.description || "";
+    if (!updateData.status) updateData.status = category.status;
+    if (!updateData.description)
+      updateData.description = category.description;
 
-    const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    const updated = await Category.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -144,7 +184,8 @@ export const updateCategory = async (req, res) => {
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-    if (!category) return res.status(404).json({ message: "Category not found" });
+    if (!category)
+      return res.status(404).json({ message: "Category not found" });
 
     await category.deleteOne();
     res.json({ message: "Deleted successfully" });
