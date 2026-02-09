@@ -1,58 +1,126 @@
 import Banner from "../models/banner.model.js";
 import { uploadBannerImage } from "../utils/cloudinary.js";
 
+// export const createBanner = async (req, res) => {
+//   try {
+//     const {
+//       imageAltText,
+//       title,
+//       description,
+//       priority,
+//       destinationUrl,
+//       bannerFor,
+//       startDate,
+//       endDate,
+//       status
+//     } = req.body;
+
+//     if (!req.files || req.files.length === 0) {
+//       return res
+//         .status(400)
+//         .json({ message: "At least one image file is required" });
+//     }
+
+//     const uploadPromises = req.files.map((file) =>
+//       uploadBannerImage(file.buffer)
+//     );
+//     const uploadResults = await Promise.all(uploadPromises);
+
+//     const images = uploadResults.map((result) => ({
+//       url: result.secure_url,
+//       public_id: result.public_id,
+//     }));
+
+//     const newBanner = await Banner.create({
+//       imageUrl: images[0].url,
+//       imageAltText,
+//       title,
+//       description,
+//       priority,
+//       destinationUrl,
+//       bannerFor,
+//       startDate,
+//       endDate,
+//       status
+//     });
+
+//     res.status(201).json({
+//       message: "Banner created successfully",
+//       banner: newBanner,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Error creating banner",
+//       error,
+//     });
+//     console.log("Error creating banner:     ", error);
+
+//   }
+// };
+
 export const createBanner = async (req, res) => {
   try {
     const {
-      imageAltText,
+      imageAlt,
       title,
-      description,
       priority,
-      destinationUrl,
-      bannerFor,
+      link,
+      linkTarget,
+      placement,
+      targetAudience,
       startDate,
       endDate,
+      status,
+      isClickable,
+      trackingEnabled,
+      notes
     } = req.body;
 
     if (!req.files || req.files.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "At least one image file is required" });
+      return res.status(400).json({
+        message: "At least one image file is required"
+      });
     }
 
-    const uploadPromises = req.files.map((file) =>
+    const uploadPromises = req.files.map(file =>
       uploadBannerImage(file.buffer)
     );
     const uploadResults = await Promise.all(uploadPromises);
 
-    const images = uploadResults.map((result) => ({
+    const images = uploadResults.map(result => ({
       url: result.secure_url,
-      public_id: result.public_id,
+      public_id: result.public_id
     }));
 
+    // Create banner
     const newBanner = await Banner.create({
-      imageUrl: images[0].url,
-      imageAltText,
+      imageUrl: images[0].url, // first image as main banner
+      imageAlt,
       title,
-      description,
       priority,
-      destinationUrl,
-      bannerFor,
-      startDate,
-      endDate,
+      link,
+      linkTarget,
+      placement,
+      targetAudience,
+      startDate: startDate || null,
+      endDate: endDate || null,
+      status,
+      isClickable,
+      trackingEnabled,
+      notes
     });
 
     res.status(201).json({
       message: "Banner created successfully",
-      banner: newBanner,
+      banner: newBanner
     });
+
   } catch (error) {
+    console.log("Error creating banner:", error);
     res.status(500).json({
       message: "Error creating banner",
-      error,
+      error: error.message
     });
-    console.log("Error creating banner:     ", error);
-
   }
 };
 
@@ -112,51 +180,119 @@ export const deactivateBanner = async (req, res) => {
   }
 };
 
+// export const editBanner = async (req, res) => {
+//   try {
+//     const {
+//       id,
+//       imageUrl,
+//       imageAltText,
+//       title,
+//       description,
+//       priority,
+//       destinationUrl,
+//       bannerFor,
+//       startDate,
+//       endDate,
+//       isActive,
+//       status
+//     } = req.body;
+
+//     const banner = await Banner.findByIdAndUpdate(
+//       id,
+//       {
+//         imageUrl,
+//         imageAltText,
+//         title,
+//         description,
+//         priority,
+//         destinationUrl,
+//         bannerFor,
+//         startDate,
+//         endDate,
+//         isActive,
+//         status
+//       },
+//       { new: true }
+//     );
+
+//     if (!banner) {
+//       return res.status(404).json({ message: "Banner not found" });
+//     }
+
+//     res.status(200).json({
+//       message: "Banner edited successfully",
+//       banner,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Error editing banner",
+//       error,
+//     });
+//   }
+// };
+
 export const editBanner = async (req, res) => {
   try {
-    const {
-      id,
-      imageUrl,
-      imageAltText,
-      title,
-      description,
-      priority,
-      destinationUrl,
-      bannerFor,
-      startDate,
-      endDate,
-      isActive,
-    } = req.body;
+    const { id } = req.params;
 
-    const banner = await Banner.findByIdAndUpdate(
-      id,
-      {
-        imageUrl,
-        imageAltText,
-        title,
-        description,
-        priority,
-        destinationUrl,
-        bannerFor,
-        startDate,
-        endDate,
-        isActive,
-      },
-      { new: true }
-    );
-
+    const banner = await Banner.findById(id);
     if (!banner) {
       return res.status(404).json({ message: "Banner not found" });
     }
 
+    const {
+      imageAlt,
+      title,
+      
+      priority,
+      link,
+      linkTarget,
+      placement,
+      targetAudience,
+      startDate,
+      endDate,
+      status,
+      isClickable,
+      trackingEnabled,
+      notes
+    } = req.body;
+
+    if (req.file) {
+      console.log("New image received:", req.file.originalname);
+
+      const uploadResult = await uploadBannerImage(req.file.buffer);
+      banner.imageUrl = uploadResult.secure_url;
+    }
+
+    if (imageAlt !== undefined) banner.imageAltText = imageAlt;
+    if (title !== undefined) banner.title = title;
+    if (priority !== undefined) banner.priority = priority;
+
+    if (link !== undefined) banner.destinationUrl = link;
+    if (placement !== undefined) banner.bannerFor = placement;
+    if (targetAudience !== undefined) banner.targetAudience = targetAudience;
+    if (linkTarget !== undefined) banner.linkTarget = linkTarget;
+
+    if (startDate !== undefined) banner.startDate = startDate || null;
+    if (endDate !== undefined) banner.endDate = endDate || null;
+
+    if (status !== undefined) banner.status = status;
+    if (isClickable !== undefined) banner.isClickable = isClickable;
+    if (trackingEnabled !== undefined) banner.trackingEnabled = trackingEnabled;
+    if (notes !== undefined) banner.notes = notes;
+
+    await banner.save();
+
     res.status(200).json({
-      message: "Banner edited successfully",
-      banner,
+      message: "Banner updated successfully",
+      banner
     });
+
   } catch (error) {
+    console.error("Error editing banner:", error);
     res.status(500).json({
       message: "Error editing banner",
-      error,
+      error: error.message
     });
   }
 };

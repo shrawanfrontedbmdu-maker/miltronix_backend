@@ -6,23 +6,18 @@ const blogSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
-
     excerpt: {
         type: String,
         trim: true
     },
-
     category: {
         type: String,
         trim: true
     },
-
     tags: [{
         type: String,
         trim: true
     }],
-
-    // ✅ Content Blocks
     contentBlocks: [{
         type: { type: String, required: true }, // text, image, heading, quote, code, list
         content: String,
@@ -31,26 +26,22 @@ const blogSchema = new mongoose.Schema({
         caption: String,
         order: Number
     }],
-
     featuredImage: {
         url: String,
         alt: String
     },
-
     status: {
         type: String,
         enum: ["draft", "published"],
         default: "draft"
     },
 
-    // ✅ NEW: Author Object
     author: {
         name: { type: String, trim: true },
         email: { type: String, trim: true },
-        image: { type: String } // profile picture URL
+        image: { type: String }
     },
 
-    // ✅ NEW: Blog Stats
     views: {
         type: Number,
         default: 0
@@ -66,10 +57,15 @@ const blogSchema = new mongoose.Schema({
         default: 0
     },
 
-    // ✅ NEW: Estimated Read Time (in minutes)
     readTime: {
         type: Number,
         default: 1
+    },
+    slug:
+    {
+        type: String,
+        unique: true,
+        index: true
     },
 
     createdAt: {

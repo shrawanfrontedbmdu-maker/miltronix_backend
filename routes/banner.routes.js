@@ -1,5 +1,5 @@
 import express from 'express'
-import { 
+import {
     createBanner,
     getBannerByPlacement,
     getBannerByStatus,
@@ -17,7 +17,7 @@ const router = express.Router();
 
 router.get('/', getBanner)
 router.post('/', upload.array('image'), createBanner)
-router.patch('/:id', editBanner)
+router.put('/:id', upload.single('image'), editBanner)
 router.get('/:id', getBannerById)
 router.delete('/:id', deleteBanner)
 router.post('/duplicate/:id', duplicateBanner)

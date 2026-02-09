@@ -1,6 +1,7 @@
 import Blogs from "../models/blog.model.js";
 import { uploadBlogImage } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
+import { generateBlogSlug } from "../Slugcontroller/blogSlug.js"
 
 // export const createBlog = async (req, res) => {
 //   try {
@@ -44,6 +45,129 @@ import mongoose from "mongoose";
 //   }
 // };
 
+
+// export const createBlog = async (req, res) => {
+//   try {
+//     const {
+//       title,
+//       excerpt,
+//       category,
+//       status,
+//       tags,
+//       seoTitle,
+//       seoDescription,
+//       seoKeywords,
+//       isFeatured,
+//       isCommentEnabled,
+//       featuredAlt,
+//       author
+//     } = req.body;
+
+//     if (!title || !excerpt) {
+//       return res.status(400).json({ message: "Title and excerpt are required" });
+//     }
+
+//     const parsedTags = tags ? JSON.parse(tags) : [];
+//     const parsedKeywords = seoKeywords ? JSON.parse(seoKeywords) : [];
+//     const parsedContentBlocks = req.body.contentBlocks
+//       ? JSON.parse(req.body.contentBlocks)
+//       : [];
+
+//     let uploadResults = [];
+//     if (req.files && req.files.length > 0) {
+//       const uploadPromises = req.files.map(file => uploadBlogImage(file.buffer));
+//       uploadResults = await Promise.all(uploadPromises);
+//     }
+
+//     let imgIndex = 0;
+
+//     const featuredImage = uploadResults[imgIndex]
+//       ? {
+//         url: uploadResults[imgIndex].secure_url,
+//         alt: featuredAlt || ""
+//       }
+//       : null;
+//     imgIndex++;
+
+//     const contentBlocks = parsedContentBlocks.map(block => {
+//       if (block.type === "image") {
+//         const imageUrl = uploadResults[imgIndex]
+//           ? uploadResults[imgIndex].secure_url
+//           : null;
+//         imgIndex++;
+//         return {
+//           ...block,
+//           url: imageUrl
+//         };
+//       }
+//       return block;
+//     });
+
+//     const finalStatus =
+//       status && ["draft", "published"].includes(status.toLowerCase())
+//         ? status.toLowerCase()
+//         : "draft";
+
+//     let parsedAuthor = {};
+
+//     if (author) {
+//       parsedAuthor = typeof author === "string" ? JSON.parse(author) : author;
+//     }
+
+//     const finalAuthor = {
+//       name: parsedAuthor.name?.trim() || "Guest Author",
+//       email: parsedAuthor.email?.trim() || "guest@example.com",
+//       image:
+//         parsedAuthor.image ||
+//         "https://cdn-icons-png.flaticon.com/512/149/149071.png" // dummy profile pic
+//     };
+
+//     const calculateReadTime = blocks => {
+//       const wordsPerMinute = 200;
+//       let totalWords = 0;
+
+//       blocks.forEach(block => {
+//         if (block.content) {
+//           totalWords += block.content.split(/\s+/).length;
+//         }
+//       });
+
+//       return Math.max(1, Math.ceil(totalWords / wordsPerMinute));
+//     };
+
+//     const readTime = calculateReadTime(contentBlocks);
+
+//     const newBlog = await Blogs.create({
+//       title,
+//       excerpt,
+//       category,
+//       status: finalStatus,
+//       tags: parsedTags,
+//       seoTitle,
+//       seoDescription,
+//       seoKeywords: parsedKeywords,
+//       isFeatured: isFeatured === "true" || isFeatured === true,
+//       isCommentEnabled: isCommentEnabled === "true" || isCommentEnabled === true,
+//       featuredImage,
+//       contentBlocks,
+//       author: finalAuthor,
+//       readTime
+//     });
+
+//     res.status(201).json({
+//       message: "Blog created successfully",
+//       blog: newBlog
+//     });
+
+//   } catch (error) {
+//     console.error("Error creating blog:", error);
+//     res.status(500).json({
+//       message: "Error creating blog",
+//       error: error.message
+//     });
+//   }
+// };
+
 export const createBlog = async (req, res) => {
   try {
     const {
@@ -61,16 +185,19 @@ export const createBlog = async (req, res) => {
       author
     } = req.body;
 
+    // Title & Excerpt required
     if (!title || !excerpt) {
       return res.status(400).json({ message: "Title and excerpt are required" });
     }
 
+    // Parse arrays
     const parsedTags = tags ? JSON.parse(tags) : [];
     const parsedKeywords = seoKeywords ? JSON.parse(seoKeywords) : [];
     const parsedContentBlocks = req.body.contentBlocks
       ? JSON.parse(req.body.contentBlocks)
       : [];
 
+    // Upload images
     let uploadResults = [];
     if (req.files && req.files.length > 0) {
       const uploadPromises = req.files.map(file => uploadBlogImage(file.buffer));
@@ -79,6 +206,7 @@ export const createBlog = async (req, res) => {
 
     let imgIndex = 0;
 
+    // Featured image
     const featuredImage = uploadResults[imgIndex]
       ? {
         url: uploadResults[imgIndex].secure_url,
@@ -87,27 +215,24 @@ export const createBlog = async (req, res) => {
       : null;
     imgIndex++;
 
+    // Content block images
     const contentBlocks = parsedContentBlocks.map(block => {
       if (block.type === "image") {
-        const imageUrl = uploadResults[imgIndex]
-          ? uploadResults[imgIndex].secure_url
-          : null;
+        const imageUrl = uploadResults[imgIndex] ? uploadResults[imgIndex].secure_url : null;
         imgIndex++;
-        return {
-          ...block,
-          url: imageUrl
-        };
+        return { ...block, url: imageUrl };
       }
       return block;
     });
 
+    // Final status
     const finalStatus =
       status && ["draft", "published"].includes(status.toLowerCase())
         ? status.toLowerCase()
         : "draft";
 
+    // Author
     let parsedAuthor = {};
-
     if (author) {
       parsedAuthor = typeof author === "string" ? JSON.parse(author) : author;
     }
@@ -117,26 +242,30 @@ export const createBlog = async (req, res) => {
       email: parsedAuthor.email?.trim() || "guest@example.com",
       image:
         parsedAuthor.image ||
-        "https://cdn-icons-png.flaticon.com/512/149/149071.png" // dummy profile pic
+        "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     };
 
+    // Calculate read time
     const calculateReadTime = blocks => {
       const wordsPerMinute = 200;
       let totalWords = 0;
-
       blocks.forEach(block => {
-        if (block.content) {
-          totalWords += block.content.split(/\s+/).length;
-        }
+        if (block.content) totalWords += block.content.split(/\s+/).length;
       });
-
       return Math.max(1, Math.ceil(totalWords / wordsPerMinute));
     };
-
     const readTime = calculateReadTime(contentBlocks);
 
+    // Generate slug
+    let slug = "";
+    if (title && typeof title === "string" && title.trim() !== "") {
+      slug = await generateBlogSlug(title);
+    }
+
+    // Create blog
     const newBlog = await Blogs.create({
       title,
+      slug, // ✅ slug included
       excerpt,
       category,
       status: finalStatus,
@@ -165,7 +294,6 @@ export const createBlog = async (req, res) => {
     });
   }
 };
-
 
 export const getBlogs = async (req, res) => {
   try {
@@ -208,39 +336,110 @@ export const getBlogById = async (req, res) => {
 //   try {
 //     const blogId = req.params.id;
 
-//     const { title, excerpt, category, tags } = req.body;
+//     let {
+//       title,
+//       excerpt,
+//       category,
+//       tags,
+//       status,
+//       author,
+//       featuredAlt
+//     } = req.body;
+
+//     let parsedTags;
+//     if (tags) {
+//       parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
+//     }
 
 //     let parsedContentBlocks = [];
 //     if (req.body.contentBlocks) {
-//       parsedContentBlocks = JSON.parse(req.body.contentBlocks);
+//       parsedContentBlocks =
+//         typeof req.body.contentBlocks === "string"
+//           ? JSON.parse(req.body.contentBlocks)
+//           : req.body.contentBlocks;
 //     }
 
-//     let updatedContentBlocks = [...parsedContentBlocks];
-
+//     let uploadResults = [];
 //     if (req.files && req.files.length > 0) {
-//       const uploadPromises = req.files.map((file) => uploadBlogImage(file.buffer));
-//       const uploadResults = await Promise.all(uploadPromises);
-
-//       updatedContentBlocks = parsedContentBlocks.map((block, index) => ({
-//         ...block,
-//         image: uploadResults[index]?.secure_url || block.image || null,
-//       }));
+//       const uploadPromises = req.files.map(file =>
+//         uploadBlogImage(file.buffer)
+//       );
+//       uploadResults = await Promise.all(uploadPromises);
 //     }
 
-//     const updatedBlog = await Blogs.findByIdAndUpdate(
-//       blogId,
-//       {
-//         title,
-//         excerpt,
-//         category,
-//         tags,
-//         contentBlocks: updatedContentBlocks,
-//       },
-//       {
-//         new: true,
-//         runValidators: true,
+//     let imgIndex = 0;
+
+//     let featuredImage;
+//     if (uploadResults[imgIndex]) {
+//       featuredImage = {
+//         url: uploadResults[imgIndex].secure_url,
+//         alt: featuredAlt || ""
+//       };
+//       imgIndex++;
+//     }
+
+//     const updatedContentBlocks = parsedContentBlocks.map(block => {
+//       if (block.type === "image") {
+//         const newImageUrl = uploadResults[imgIndex]
+//           ? uploadResults[imgIndex].secure_url
+//           : block.url || null;
+
+//         imgIndex++;
+//         return { ...block, url: newImageUrl };
 //       }
-//     );
+//       return block;
+//     });
+
+//     const finalStatus =
+//       status && ["draft", "published"].includes(status.toLowerCase())
+//         ? status.toLowerCase()
+//         : undefined;
+
+//     let finalAuthor;
+//     if (author) {
+//       const parsedAuthor =
+//         typeof author === "string" ? JSON.parse(author) : author;
+
+//       finalAuthor = {
+//         name: parsedAuthor.name?.trim() || "Guest Author",
+//         email: parsedAuthor.email?.trim() || "guest@example.com",
+//         image:
+//           parsedAuthor.image ||
+//           "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+//       };
+//     }
+
+//     const calculateReadTime = blocks => {
+//       const wordsPerMinute = 200;
+//       let totalWords = 0;
+
+//       blocks.forEach(block => {
+//         if (block.content) {
+//           totalWords += block.content.split(/\s+/).length;
+//         }
+//       });
+
+//       return Math.max(1, Math.ceil(totalWords / wordsPerMinute));
+//     };
+
+//     const readTime = calculateReadTime(updatedContentBlocks);
+
+//     const updateData = {
+//       ...(title && { title }),
+//       ...(excerpt && { excerpt }),
+//       ...(category && { category }),
+//       ...(parsedTags && { tags: parsedTags }),
+//       ...(parsedContentBlocks.length > 0 && { contentBlocks: updatedContentBlocks }),
+//       ...(featuredImage && { featuredImage }),
+//       ...(finalStatus && { status: finalStatus }),
+//       ...(finalAuthor && { author: finalAuthor }),
+//       readTime
+//     };
+
+//     const updatedBlog = await Blogs.findByIdAndUpdate(blogId, updateData, {
+//       new: true,
+//       runValidators: true
+//     });
 
 //     if (!updatedBlog) {
 //       return res.status(404).json({ message: "Blog not found" });
@@ -248,31 +447,14 @@ export const getBlogById = async (req, res) => {
 
 //     res.status(200).json({
 //       message: "Blog updated successfully",
-//       updatedBlog,
+//       blog: updatedBlog
 //     });
+
 //   } catch (error) {
 //     console.error("Error updating blog:", error);
 //     res.status(500).json({
 //       message: "Error updating blog",
-//       error: error.message,
-//     });
-//   }
-// };
-
-
-// export const deleteBlog = async (req, res) => {
-//   try {
-//     const deletedBlog = await Blogs.findByIdAndDelete(req.params.id);
-
-//     if (!deletedBlog) {
-//       return res.status(404).json({ message: "Blog not found" });
-//     }
-
-//     res.status(200).json({ message: "Blog deleted successfully" });
-//   } catch (error) {
-//     res.status(500).json({
-//       message: "Error deleting blog",
-//       error: error.message,
+//       error: error.message
 //     });
 //   }
 // };
@@ -281,94 +463,74 @@ export const editBlog = async (req, res) => {
   try {
     const blogId = req.params.id;
 
-    let {
-      title,
-      excerpt,
-      category,
-      tags,
-      status,
-      author,
-      featuredAlt
-    } = req.body;
-
-    let parsedTags;
-    if (tags) {
-      parsedTags = typeof tags === "string" ? JSON.parse(tags) : tags;
+    if (!mongoose.Types.ObjectId.isValid(blogId)) {
+      return res.status(400).json({ message: "Invalid blog ID" });
     }
 
-    let parsedContentBlocks = [];
-    if (req.body.contentBlocks) {
-      parsedContentBlocks =
-        typeof req.body.contentBlocks === "string"
-          ? JSON.parse(req.body.contentBlocks)
-          : req.body.contentBlocks;
+    const existingBlog = await Blogs.findById(blogId);
+    if (!existingBlog) {
+      return res.status(404).json({ message: "Blog not found" });
     }
+
+    let { title, excerpt, category, tags, status, author, featuredAlt } = req.body;
+
+    const parsedTags = tags ? (typeof tags === "string" ? JSON.parse(tags) : tags) : undefined;
+
+    const parsedContentBlocks = req.body.contentBlocks
+      ? typeof req.body.contentBlocks === "string"
+        ? JSON.parse(req.body.contentBlocks)
+        : req.body.contentBlocks
+      : [];
 
     let uploadResults = [];
     if (req.files && req.files.length > 0) {
-      const uploadPromises = req.files.map(file =>
-        uploadBlogImage(file.buffer)
-      );
+      const uploadPromises = req.files.map(file => uploadBlogImage(file.buffer));
       uploadResults = await Promise.all(uploadPromises);
     }
 
     let imgIndex = 0;
 
-    let featuredImage;
+    let featuredImage = existingBlog.featuredImage;
     if (uploadResults[imgIndex]) {
-      featuredImage = {
-        url: uploadResults[imgIndex].secure_url,
-        alt: featuredAlt || ""
-      };
+      featuredImage = { url: uploadResults[imgIndex].secure_url, alt: featuredAlt || "" };
       imgIndex++;
     }
 
+    // Update content block images
     const updatedContentBlocks = parsedContentBlocks.map(block => {
       if (block.type === "image") {
-        const newImageUrl = uploadResults[imgIndex]
-          ? uploadResults[imgIndex].secure_url
-          : block.url || null;
-
+        const url = uploadResults[imgIndex] ? uploadResults[imgIndex].secure_url : block.url || null;
         imgIndex++;
-        return { ...block, url: newImageUrl };
+        return { ...block, url };
       }
       return block;
     });
 
-    const finalStatus =
-      status && ["draft", "published"].includes(status.toLowerCase())
-        ? status.toLowerCase()
-        : undefined;
-
+    // Author
     let finalAuthor;
     if (author) {
-      const parsedAuthor =
-        typeof author === "string" ? JSON.parse(author) : author;
-
+      const parsedAuthor = typeof author === "string" ? JSON.parse(author) : author;
       finalAuthor = {
         name: parsedAuthor.name?.trim() || "Guest Author",
         email: parsedAuthor.email?.trim() || "guest@example.com",
-        image:
-          parsedAuthor.image ||
-          "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+        image: parsedAuthor.image || "https://cdn-icons-png.flaticon.com/512/149/149071.png"
       };
     }
 
+    // Status
+    const finalStatus = status && ["draft", "published"].includes(status.toLowerCase())
+      ? status.toLowerCase()
+      : undefined;
+
+    // Read time calculation
     const calculateReadTime = blocks => {
       const wordsPerMinute = 200;
-      let totalWords = 0;
-
-      blocks.forEach(block => {
-        if (block.content) {
-          totalWords += block.content.split(/\s+/).length;
-        }
-      });
-
+      const totalWords = blocks.reduce((sum, block) => sum + (block.content ? block.content.split(/\s+/).length : 0), 0);
       return Math.max(1, Math.ceil(totalWords / wordsPerMinute));
     };
-
     const readTime = calculateReadTime(updatedContentBlocks);
 
+    // Prepare update data
     const updateData = {
       ...(title && { title }),
       ...(excerpt && { excerpt }),
@@ -381,14 +543,16 @@ export const editBlog = async (req, res) => {
       readTime
     };
 
+    if (title && typeof title === "string" && title.trim() !== "") {
+      updateData.slug = await generateBlogSlug(title, blogId);
+    } else {
+      updateData.slug = existingBlog.slug;
+    }
+
     const updatedBlog = await Blogs.findByIdAndUpdate(blogId, updateData, {
       new: true,
       runValidators: true
     });
-
-    if (!updatedBlog) {
-      return res.status(404).json({ message: "Blog not found" });
-    }
 
     res.status(200).json({
       message: "Blog updated successfully",
@@ -403,8 +567,6 @@ export const editBlog = async (req, res) => {
     });
   }
 };
-
-
 export const deleteBlog = async (req, res) => {
   try {
     const { id } = req.params;

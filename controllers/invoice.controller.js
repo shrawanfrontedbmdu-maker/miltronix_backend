@@ -1,9 +1,9 @@
 import Invoice from "../models/invoice.model.js";
 import InvoiceCounterModel from "../models/invoiceCounterSchema.js";
-// import PDFDocument from "pdfkit";
+import PDFDocument from "pdfkit";
 import orderModel from "../models/order.model.js";
-import fs from "fs"
-
+import puppeteer from "puppeteer"
+import { invoiceHTML } from "../invoicetemlpate/invoiceTemplate.js";
 export const getInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find();
@@ -321,24 +321,17 @@ export const getInvoicesByMonth = async (req, res) => {
   }
 };
 
-
 export const generateInvoicePDF = async (req, res) => {
   try {
-    const { id:orderId } = req.params;
-    console.log(req.params);
+    const { id: orderId } = req.params;
+
     let invoice = await Invoice.findOne({ orderId });
 
+    // 🔹 If invoice not exists, create one from order
     if (!invoice) {
       const order = await orderModel.findById(orderId);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
+      if (!order) return res.status(404).json({ message: "Order not found" });
 
-      if (!order.products || order.products.length === 0) {
-        return res.status(400).json({ message: "Order has no products, cannot generate invoice" });
-      }
-
-      // Generate invoice number
       const year = new Date().getFullYear();
       const counter = await InvoiceCounterModel.findOneAndUpdate(
         { year },
@@ -360,165 +353,153 @@ export const generateInvoicePDF = async (req, res) => {
           company: order.shippingAddress?.company || "-",
         },
         items: order.products.map((p) => ({
-          description: p.name || "Unknown Product",
-          quantity: p.quantity || 1,
-          unitPrice: p.price || 0,
-          total: (p.price || 0) * (p.quantity || 1),
+          description: p.name,
+          quantity: p.quantity,
+          unitPrice: p.price,
+          total: p.price * p.quantity,
         })),
-        subtotal: order.totalAmount || 0,
-        tax: order.taxRate || 0,
-        total: (order.totalAmount || 0) + (order.taxRate || 0),
+        subtotal: order.totalAmount,
+        tax: order.taxAmount || 0,
+        total: order.finalAmount,
         dueDate: order.deliveryDate,
-        status: "sent",
+        status: "SENT",
         notes: order.notes || "",
-        termsAndConditions: "",
       });
     }
-  const doc = new PDFDocument({ size: "A4", margin: 40 });
+
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=invoice.pdf"
-    );
+    res.setHeader("Content-Disposition", "attachment; filename=invoice.pdf");
 
     doc.pipe(res);
 
-    /* ================= HEADER ================= */
+    const invoiceId = invoice.invoiceNumber || invoice._id.toString().slice(-6);
 
-    const invoiceId = invoice.invoiceNumber
-      ? invoice.invoiceNumber
-      : invoice._id
-        ? invoice._id.toString().slice(0, 8)
-        : "N/A";
-
-    doc.font("Helvetica-Bold").fontSize(18);
+    // ================= HEADER =================
+    doc.font("Helvetica-Bold").fontSize(16);
     doc.text(invoice.customer?.company || "Company Name", 40, 40);
 
     doc.font("Helvetica").fontSize(10);
-    doc.text(invoice.customer?.address || "Address not provided", 40, 65);
-    doc.text(invoice.customer?.city || "", 40, 80);
-    doc.text(`Phone: ${invoice.customer?.phone || ""}`, 40, 95);
-    doc.text(`Email: ${invoice.customer?.email || ""}`, 40, 110);
+    doc.text(invoice.customer?.address || "", 40, 60);
+    doc.text(invoice.customer?.city || "", 40, 75);
+    doc.text(`Phone: ${invoice.customer?.phone || ""}`, 40, 90);
+    doc.text(`Email: ${invoice.customer?.email || ""}`, 40, 105);
 
-    doc.font("Helvetica-Bold").fontSize(22);
+    doc.font("Helvetica-Bold").fontSize(24);
     doc.text("INVOICE", 400, 40, { align: "right" });
 
-    doc.font("Helvetica").fontSize(10);
+    doc.font("Helvetica").fontSize(11);
     doc.text(`#${invoiceId}`, 400, 70, { align: "right" });
-    doc.text("SENT", 400, 88, { align: "right" });
 
-    doc.moveTo(40, 130).lineTo(550, 130).stroke("#e5e7eb");
+    // Status Badge
+    doc.fillColor("#e0e7ff").roundedRect(400, 90, 120, 22, 5).fill();
+    doc.fillColor("#1e40af")
+      .fontSize(10)
+      .text(invoice.status || "SENT", 400, 96, { align: "center", width: 120 });
 
-    /* ================= BILL TO ================= */
+    doc.fillColor("black");
+    doc.moveTo(40, 125).lineTo(550, 125).stroke("#d1d5db");
 
-    doc.font("Helvetica-Bold").fontSize(11);
-    doc.text("Bill To:", 40, 150);
+    // ================= BILL TO =================
+    doc.font("Helvetica-Bold").fontSize(11).text("Bill To:", 40, 145);
 
     doc.font("Helvetica").fontSize(10);
-    doc.text(invoice.customer?.name || "", 40, 168);
-    doc.text(invoice.customer?.company || "", 40, 183);
-    doc.text(invoice.customer?.address || "", 40, 198);
-    doc.text(invoice.customer?.city || "", 40, 213);
-    doc.text(`Email: ${invoice.customer?.email || ""}`, 40, 228);
-    doc.text(`Phone: ${invoice.customer?.phone || ""}`, 40, 243);
+    doc.text(invoice.customer?.name || "", 40, 162);
+    doc.text(invoice.customer?.company || "", 40, 177);
+    doc.text(invoice.customer?.address || "", 40, 192);
+    doc.text(invoice.customer?.city || "", 40, 207);
+    doc.text(`Email: ${invoice.customer?.email || ""}`, 40, 222);
+    doc.text(`Phone: ${invoice.customer?.phone || ""}`, 40, 237);
 
-    doc.text(`Invoice Date: ${invoice.invoiceDate || "N/A"}`, 360, 168);
-    doc.text(`Due Date: ${invoice.dueDate || "N/A"}`, 360, 188);
+    doc.font("Helvetica-Bold").text("Invoice Date:", 360, 162);
+    doc.font("Helvetica").text(new Date().toLocaleDateString(), 450, 162);
 
-    /* ================= TABLE HEADER ================= */
+    doc.font("Helvetica-Bold").text("Due Date:", 360, 182);
+    doc.font("Helvetica").text(
+      invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : "N/A",
+      450,
+      182
+    );
 
-    let y = 290;
+    // ================= ITEMS TABLE =================
+    let y = 270;
 
     doc.rect(40, y - 8, 510, 25).fill("#f3f4f6");
-    doc.fillColor("#000").font("Helvetica-Bold");
+    doc.fillColor("black").font("Helvetica-Bold");
 
     doc.text("Description", 45, y);
-    doc.text("Qty", 285, y);
-    doc.text("Rate", 345, y);
-    doc.text("Amount", 430, y);
+    doc.text("Qty", 290, y);
+    doc.text("Rate", 350, y);
+    doc.text("Amount", 450, y);
 
     y += 30;
     doc.font("Helvetica");
 
-    /* ================= TABLE ROWS ================= */
-
-    invoice.items?.forEach(item => {
-      doc.text(item.description || "", 45, y);
-      doc.text(item.quantity || "", 285, y);
-      doc.text(`₹${item.unitPrice || 0}`, 345, y);
-      doc.text(`₹${item.total || 0}`, 430, y);
+    invoice.items.forEach((item) => {
+      doc.text(item.description, 45, y, { width: 230 });
+      doc.text(item.quantity.toString(), 290, y);
+      doc.text(`₹${item.unitPrice}`, 350, y);
+      doc.text(`₹${item.total}`, 450, y);
 
       doc.moveTo(40, y + 18).lineTo(550, y + 18).stroke("#e5e7eb");
       y += 35;
     });
 
-    /* ================= TOTALS ================= */
+    // ================= TOTALS =================
+    y += 10;
+    const rightX = 340;
 
-    const rightX = 350;
+    doc.rect(rightX - 15, y - 10, 225, 110).stroke("#e5e7eb");
 
-    const drawRow = (label, value) => {
+    const drawRow = (label, value, bold = false) => {
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica");
       doc.text(label, rightX, y);
-      doc.text(`₹${value}`, 430, y);
-      doc.moveTo(rightX, y + 15).lineTo(550, y + 15).stroke("#e5e7eb");
+      doc.text(`₹${value}`, 450, y);
       y += 22;
     };
 
-    doc.fontSize(10);
-    drawRow("Subtotal:", invoice.subtotal || 0);
-    drawRow("Discount:", invoice.discount || 0);
-    drawRow("Tax (12%):", invoice.tax || 0);
+    drawRow("Subtotal:", invoice.subtotal);
+    drawRow("Tax:", invoice.tax);
 
     doc.moveTo(rightX, y).lineTo(550, y).stroke("#000");
-    y += 10;
+    y += 8;
 
-    doc.font("Helvetica-Bold").fontSize(11);
-    doc.text("Total:", rightX, y);
-    doc.text(`₹${invoice.total || 0}`, 430, y);
-    doc.moveTo(rightX, y + 18).lineTo(550, y + 18).stroke("#000");
+    drawRow("Total:", invoice.total, true);
 
-    /* ================= PAYMENT ================= */
-
+    // ================= PAYMENT =================
     y += 40;
-    doc.font("Helvetica").fontSize(10);
-    doc.text("Amount Paid:", 40, y);
-    doc.text(`₹${invoice.amountPaid || 0}`, 430, y);
+    doc.font("Helvetica").text("Amount Paid:", 40, y);
+    doc.text(`₹${invoice.amountPaid || 0}`, 450, y);
 
-    doc.moveTo(40, y + 18).lineTo(550, y + 18).stroke("#000");
+    doc.moveTo(40, y + 18).lineTo(550, y + 18).stroke("#d1d5db");
 
-    y += 30;
-    doc.font("Helvetica-Bold");
-    doc.text("Balance Due:", 40, y);
+    y += 28;
+    doc.font("Helvetica-Bold").text("Balance Due:", 40, y);
+    doc.text(`₹${invoice.balance || 0}`, 450, y);
 
-    const balance =
-      invoice.balance === undefined || invoice.balance === null
-        ? "0.00"
-        : invoice.balance;
-
-    doc.text(`₹${balance}`, 430, y);
-
-    /* ================= FOOTER ================= */
-
-    y += 40;
+    // ================= FOOTER =================
+    y += 50;
     doc.font("Helvetica-Bold").text("Notes:", 40, y);
-    doc.font("Helvetica").text(
-      "Thank you for your business! Payment is due within 30 days.",
+    doc.font("Helvetica").fontSize(10).text(
+      invoice.notes || "Thank you for your business!",
       40,
-      y + 15
+      y + 15,
+      { width: 230 }
     );
 
-    doc.font("Helvetica-Bold").text("Terms & Conditions:", 300, y);
-    doc.font("Helvetica").text(
-      "Please pay within the due date to avoid inconvenience.",
-      300,
-      y + 15
+    doc.font("Helvetica-Bold").text("Terms & Conditions:", 320, y);
+    doc.font("Helvetica").fontSize(10).text(
+      "Please pay within the due date.",
+      320,
+      y + 15,
+      { width: 230 }
     );
 
     doc.end();
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Invoice PDF generation failed", error: error.message });
+    res.status(500).json({ message: "Invoice PDF generation failed" });
   }
 };
 
@@ -526,16 +507,15 @@ export const generateInvoicePDF = async (req, res) => {
 //   try {
 //     const { id: orderId } = req.params;
 
-//     // 1. Database se data lana
 //     let invoice = await Invoice.findOne({ orderId });
 
 //     if (!invoice) {
 //       const order = await orderModel.findById(orderId);
 //       if (!order) return res.status(404).json({ message: "Order not found" });
 
-//       // Counter logic... (ensure InvoiceCounterModel is correct)
 //       const year = new Date().getFullYear();
-//       const counter = await InvoiceCounterModel.findOneAndUpdate(
+
+//       const counter = await InvoiceCounter.findOneAndUpdate(
 //         { year },
 //         { $inc: { seq: 1 } },
 //         { new: true, upsert: true }
@@ -552,41 +532,51 @@ export const generateInvoicePDF = async (req, res) => {
 //           phone: order.shippingAddress?.phone,
 //           address: order.shippingAddress?.address,
 //           city: order.shippingAddress?.city,
+//           company: order.shippingAddress?.company,
 //         },
-//         items: (order.products || []).map(p => ({
+//         items: order.products.map((p) => ({
 //           description: p.name,
 //           quantity: p.quantity,
 //           unitPrice: p.price,
-//           total: (p.price || 0) * (p.quantity || 0),
+//           total: p.price * p.quantity,
 //         })),
 //         subtotal: order.totalAmount,
-//         tax: order.taxRate || 0,
-//         total: (order.totalAmount || 0) + (order.taxRate || 0),
-//         status: "FINAL",
+//         tax: order.taxAmount || 0,
+//         total: order.finalAmount,
+//         dueDate: order.deliveryDate,
+//         status: "SENT",
+//         notes: order.notes || "",
 //       });
 //     }
 
-//     // 2. PDF Generation - Yahan crash hone ke chances zyada hote hain
-//     const doc = new PDFDocument({ size: "A4", margin: 50 });
+//     const browser = await puppeteer.launch({
+//       headless: "new",
+//       args: ["--no-sandbox", "--disable-setuid-sandbox"],
+//     });
 
-//     res.setHeader("Content-Type", "application/pdf");
-//     res.setHeader("Content-Disposition", `attachment; filename=${invoice.invoiceNumber}.pdf`);
+//     const page = await browser.newPage();
 
-//     doc.pipe(res);
+//     await page.setContent(invoiceHTML(invoice), {
+//       waitUntil: "networkidle0",
+//     });
 
-//     // Styling basics
-//     doc.fontSize(20).text('INVOICE', { align: 'center' });
-//     doc.moveDown();
-//     doc.fontSize(12).text(`Invoice No: ${invoice.invoiceNumber}`);
-//     doc.text(`Customer: ${invoice.customer.name}`);
-    
-//     // PDF finish karna zaroori hai
-//     doc.end();
+//     const pdfBuffer = await page.pdf({
+//       format: "A4",
+//       printBackground: true,
+//       margin: { top: "20px", bottom: "20px", left: "20px", right: "20px" },
+//     });
 
+//     await browser.close();
+
+//     res.set({
+//       "Content-Type": "application/pdf",
+//       "Content-Disposition": `attachment; filename=invoice-${invoice.invoiceNumber}.pdf`,
+//       "Content-Length": pdfBuffer.length,
+//     });
+
+//     res.send(pdfBuffer);
 //   } catch (error) {
-//     console.error("CRASH ERROR:", error); // Check your VS Code terminal
-//     if (!res.headersSent) {
-//         res.status(500).json({ message: "Internal Server Error", error: error.message });
-//     }
+//     console.error("Invoice PDF Error:", error);
+//     res.status(500).json({ message: "Failed to generate invoice PDF" });
 //   }
 // };
