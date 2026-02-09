@@ -6,7 +6,7 @@ import {
   deleteProduct,
   getProductById,
 } from "../controllers/product.controller.js";
-import  upload  from "../middlewares/multer.js";
+import upload from "../middlewares/multer.js";
 
 const router = express.Router();
 
