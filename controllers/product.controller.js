@@ -52,37 +52,49 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Check category exists
     const categoryDoc = await Category.findById(category);
     if (!categoryDoc) return res.status(400).json({ message: "Invalid category" });
 
     // Handle images
-    let finalImages = [];
-    if (req.files?.length > 0) {
-      const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
-      finalImages = uploads.map(img => ({
-        url: img.secure_url,
-        public_id: img.public_id,
-      }));
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "At least one product image is required" });
     }
-    if (finalImages.length === 0) return res.status(400).json({ message: "At least one product image is required" });
 
-    // Price logic
+    const finalImages = await Promise.all(
+      req.files.map(async (file) => {
+        const img = await uploadImage(file.buffer);
+        return { url: img.secure_url, public_id: img.public_id, alt: "" };
+      })
+    );
+
+    // Variant / SKU logic
     if (variants.length > 0) {
       sellingPrice = undefined;
       mrp = undefined;
+      sku = undefined; // avoid duplicate null SKU
+      for (const v of variants) {
+        if (!v.sku || !v.price) {
+          return res.status(400).json({ message: "Each variant must have SKU and price" });
+        }
+      }
     } else {
-      if (!sellingPrice) return res.status(400).json({ message: "sellingPrice required for non-variant product" });
+      if (!sellingPrice || !sku) {
+        return res.status(400).json({ message: "Non-variant product must have sellingPrice and SKU" });
+      }
     }
 
-    // Create product
+    // HSN validation
+    if (!/^\d{2}(\d{2})?(\d{2})?$/.test(hsnCode)) {
+      return res.status(400).json({ message: "HSN must be 2, 4, or 6 digits" });
+    }
+
     const product = await Product.create({
       name,
       slug,
       productKey,
       description,
       category,
-      categoryKey: categoryDoc.categoryKey,
+      categoryKey: categoryDoc.categoryKey || slug.toLowerCase(),
       images: finalImages,
       mrp,
       sellingPrice,
@@ -102,13 +114,13 @@ export const createProduct = async (req, res) => {
       shipping,
       tags,
       isRecommended,
-      status,
+      status: status.toLowerCase(),
     });
 
     res.status(201).json({ success: true, message: "Product created successfully", product });
 
   } catch (error) {
-    console.error(error);
+    console.error("Create product error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -123,7 +135,7 @@ export const getProducts = async (req, res) => {
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } }
+        { description: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -134,13 +146,12 @@ export const getProducts = async (req, res) => {
     if (minPrice || maxPrice) {
       filter.$or = [
         { sellingPrice: { ...(minPrice && { $gte: Number(minPrice) }), ...(maxPrice && { $lte: Number(maxPrice) }) } },
-        { "variants.price": { ...(minPrice && { $gte: Number(minPrice) }), ...(maxPrice && { $lte: Number(maxPrice) }) } }
+        { "variants.price": { ...(minPrice && { $gte: Number(minPrice) }), ...(maxPrice && { $lte: Number(maxPrice) }) } },
       ];
     }
 
     const products = await Product.find(filter).sort({ createdAt: -1 });
     res.json(products);
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -162,7 +173,6 @@ export const updateProduct = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    // Parse JSON fields
     if (updateData.variants) updateData.variants = parseJSON(updateData.variants, []);
     if (updateData.tags) updateData.tags = parseJSON(updateData.tags, []);
     if (updateData.supplier) updateData.supplier = parseJSON(updateData.supplier, []);
@@ -173,12 +183,8 @@ export const updateProduct = async (req, res) => {
     // Handle new images
     if (req.files?.length > 0) {
       const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
-      updateData.images = uploads.map(img => ({
-        url: img.secure_url,
-        public_id: img.public_id,
-      }));
+      updateData.images = uploads.map(img => ({ url: img.secure_url, public_id: img.public_id, alt: "" }));
 
-      // Optionally delete old images
       const existing = await Product.findById(req.params.id);
       if (existing) {
         for (const img of existing.images) {
@@ -189,7 +195,6 @@ export const updateProduct = async (req, res) => {
 
     const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
     res.json({ success: true, message: "Product updated", product: updated });
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -201,14 +206,12 @@ export const deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Delete images from Cloudinary
     for (const img of product.images) {
       await deleteImage(img.public_id);
     }
 
     await product.deleteOne();
     res.json({ success: true, message: "Product deleted successfully" });
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

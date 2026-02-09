@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
-/* ================= SUB SCHEMAS ================= */
+/* ================= SUB-SCHEMAS ================= */
 
+// Supplier info
 const supplierSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -11,6 +12,7 @@ const supplierSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Shipping info
 const shippingSchema = new mongoose.Schema(
   {
     charges: { type: Number, required: true, min: 0 },
@@ -20,12 +22,12 @@ const shippingSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Variant schema
 const variantSchema = new mongoose.Schema(
   {
-    sku: { type: String, required: true, trim: true },
+    sku: { type: String, required: true, trim: true }, // unique per variant can be enforced at app level
     price: { type: Number, required: true, min: 0 },
     stock: { type: Number, default: 0, min: 0 },
-
     attributes: {
       color: { type: String, trim: true },
       resolution: { type: String, trim: true },
@@ -33,32 +35,25 @@ const variantSchema = new mongoose.Schema(
       size: { type: String, trim: true },
       model: { type: String, trim: true },
     },
-
     isActive: { type: Boolean, default: true },
   },
   { _id: false }
 );
 
-/* ================= PRODUCT SCHEMA ================= */
-
+/* ================= MAIN PRODUCT SCHEMA ================= */
 const productSchema = new mongoose.Schema(
   {
-    /* ===== BASIC INFO ===== */
+    // Basic info
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true },
     productKey: { type: String, required: true, unique: true, trim: true },
-
     description: { type: String, required: true, trim: true },
 
-    /* ===== CATEGORY ===== */
-    category: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Category",
-      required: true,
-    },
+    // Category
+    category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
     categoryKey: { type: String, required: true, lowercase: true },
 
-    /* ===== IMAGES ===== */
+    // Images
     images: [
       {
         url: { type: String, required: true },
@@ -67,64 +62,55 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
-    /* ===== PRICE (NO VARIANT CASE) ===== */
+    // Pricing (no variant case)
     mrp: { type: Number, min: 0 },
     sellingPrice: { type: Number, min: 0 },
 
-    /* ===== BRAND ===== */
+    // Brand / Inventory
     brand: { type: String, trim: true },
 
-    /* ===== INVENTORY (NO VARIANT CASE) ===== */
-    sku: { type: String, trim: true },
-    stockQuantity: { type: Number, default: 0, min: 0 },
-
-    stockStatus: {
+    // SKU only required if no variants exist
+    sku: {
       type: String,
-      enum: ["in-stock", "out-of-stock"],
-      default: "in-stock",
+      trim: true,
+      unique: true,
+      sparse: true, // allows multiple nulls
+      required: function () {
+        return !this.variants || this.variants.length === 0;
+      },
     },
 
-    /* ===== VARIANTS ===== */
+    stockQuantity: { type: Number, default: 0, min: 0 },
+    stockStatus: { type: String, enum: ["in-stock", "out-of-stock"], default: "in-stock" },
+
+    // Variants
     variants: { type: [variantSchema], default: [] },
 
-    /* ===== TECH DETAILS ===== */
+    // Technical details
     specification: { type: String, trim: true },
     weight: { type: String, trim: true },
     dimensions: { type: String, trim: true },
+    resolution: { type: String, trim: true },
+    screenSize: { type: Number, min: 0 },
 
-    /* ===== LEGAL ===== */
+    // Legal
     warranty: { type: String, required: true, trim: true },
     returnPolicy: { type: String, required: true, trim: true },
-
-    hsnCode: {
-      type: String,
-      required: true,
-      trim: true,
-      match: /^[0-9]{4,8}$/,
-    },
-
+    hsnCode: { type: String, required: true, trim: true, match: /^[0-9]{2,6}$/ },
     barcode: { type: String, unique: true, sparse: true, trim: true },
 
-    /* ===== SUPPLIER & SHIPPING ===== */
+    // Supplier & Shipping
     supplier: { type: [supplierSchema], default: [] },
     shipping: { type: [shippingSchema], default: [] },
 
-    /* ===== FLAGS ===== */
+    // Flags
     isRecommended: { type: Boolean, default: false },
+    status: { type: String, enum: ["active", "inactive"], default: "active" },
 
-    status: {
-      type: String,
-      enum: ["active", "inactive"],
-      default: "active",
-    },
-
-    /* ===== SEO ===== */
+    // SEO
     tags: { type: [String], default: [] },
   },
-  {
-    timestamps: true,
-    versionKey: false,
-  }
+  { timestamps: true, versionKey: false }
 );
 
 export default mongoose.model("Product", productSchema);
