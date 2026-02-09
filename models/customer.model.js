@@ -58,7 +58,16 @@ const customerSchema = new mongoose.Schema({
     reviews: [reviewSchema],
 
     walletBalance: { type: Number, default: 0 },
-    rewardPoints: { type: Number, default: 0 },
+    rewardPoints: { type: Number, default: 0 }, // total usable points
+
+    rewardHistory: [
+        {
+            points: { type: Number, required: true }, // + add, - deduct
+            remark: { type: String },
+            expiryDate: { type: Date },
+            createdAt: { type: Date, default: Date.now }
+        }
+    ],
     referralCode: { type: String },
 
     role: { type: String, enum: ["customer", "admin"], default: "customer" },

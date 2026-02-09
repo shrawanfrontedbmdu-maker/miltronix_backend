@@ -1,5 +1,6 @@
 import { Customer } from "../models/customer.model.js";
 import { uploadCustomerProfileImage } from "../utils/cloudinary.js"
+import mongoose from "mongoose";
 
 export const createCustomer = async (req, res) => {
     try {
@@ -91,22 +92,6 @@ export const loginCustomer = async (req, res) => {
     }
 };
 
-// export const updateCustomer = async (req, res) => {
-//     try {
-//         const customer = await Customer.findById(req.params.id);
-//         if (!customer) return res.status(404).json({ success: false, message: "Customer not found" });
-
-//         Object.keys(req.body).forEach((key) => {
-//             customer[key] = req.body[key];
-//         });
-
-//         await customer.save();
-
-//         res.json({ success: true, message: "Customer updated", data: customer });
-//     } catch (error) {
-//         res.status(500).json({ success: false, message: error.message });
-//     }
-// };
 export const updateCustomer = async (req, res) => {
     try {
         const customer = await Customer.findById(req.params.id);
@@ -114,60 +99,69 @@ export const updateCustomer = async (req, res) => {
             return res.status(404).json({ success: false, message: "Customer not found" });
         }
 
-        const { name, phone, password } = req.body;
+        const {
+            name,
+            email,
+            phone,
+            password,
+            status,
+            role,
+            walletBalance,
+            rewardPoints,
+            emailVerified,
+            phoneVerified,
+        } = req.body;
 
-        // ===== BASIC INFO UPDATE =====
-        if (name !== undefined && name.trim() !== "") {
-            customer.name = name.trim();
-        }
+        // 👤 Basic Info
+        if (name?.trim()) customer.name = name.trim();
+        if (email?.trim()) customer.email = email.toLowerCase().trim();
+        if (phone?.trim()) customer.phone = phone.trim();
 
-        if (phone !== undefined && phone.trim() !== "") {
-            customer.phone = phone;
-        }
-
-        // ===== PASSWORD UPDATE =====
-        if (password !== undefined && password !== "") {
+        // 🔐 Password (optional)
+        if (password) {
             if (password.length < 6) {
                 return res.status(400).json({
                     success: false,
                     message: "Password must be at least 6 characters",
                 });
             }
-            customer.password = password; // will hash via pre-save middleware
+            customer.password = password; // hashed by middleware
         }
 
-        // ===== PROFILE IMAGE UPDATE =====
+        // 🚦 Account Control
+        if (status) customer.status = status;
+        if (role) customer.role = role;
+
+        // 💰 Financials (Admin Adjustment)
+        if (walletBalance !== undefined) customer.walletBalance = Number(walletBalance);
+        if (rewardPoints !== undefined) customer.rewardPoints = Number(rewardPoints);
+
+        // ✅ Verification
+        if (emailVerified !== undefined) customer.emailVerified = emailVerified;
+        if (phoneVerified !== undefined) customer.phoneVerified = phoneVerified;
+
+        // 🖼 Profile Image
         if (req.file) {
             if (customer.profileImageId) {
                 await cloudinary.uploader.destroy(customer.profileImageId);
             }
-
             const result = await uploadCustomerProfileImage(req.file.buffer);
             customer.profileImage = result.secure_url;
             customer.profileImageId = result.public_id;
         }
 
-        await customer.save(); // triggers password hash + updatedAt middleware
+        await customer.save();
 
         res.json({
             success: true,
             message: "Customer updated successfully",
-            data: {
-                _id: customer._id,
-                name: customer.name,
-                email: customer.email,
-                phone: customer.phone,
-                profileImage: customer.profileImage,
-                status: customer.status,
-            },
+            data: customer,
         });
 
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
-
-
 
 export const toggleCustomerStatus = async (req, res) => {
     try {
@@ -214,6 +208,43 @@ export const getCustomerById = async (req, res) => {
         }
 
         res.json({ success: true, data: customer });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const addRewardPoints = async (req, res) => {
+    try {
+        const { points, expiryDate, remark } = req.body;
+
+        if (!points || points <= 0) {
+            return res.status(400).json({ success: false, message: "Points must be greater than 0" });
+        }
+
+        const customer = await Customer.findById(req.params.id);
+        if (!customer) {
+            return res.status(404).json({ success: false, message: "Customer not found" });
+        }
+
+        // Add to history
+        customer.rewardHistory.push({
+            points,
+            remark: remark || "Admin added points",
+            expiryDate: expiryDate ? new Date(expiryDate) : null,
+        });
+
+        // Update total usable points
+        customer.rewardPoints += points;
+
+        await customer.save();
+
+        res.json({
+            success: true,
+            message: "Reward points added successfully",
+            totalPoints: customer.rewardPoints,
+            history: customer.rewardHistory
+        });
+
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
