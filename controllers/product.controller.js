@@ -2,7 +2,7 @@ import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
 import { uploadImage, deleteImage } from "../utils/cloudinary.js";
 
-/* ================= HELPER ================= */
+/* ================= HELPERS ================= */
 const parseJSON = (value, fallback) => {
   if (!value) return fallback;
   try {
@@ -64,14 +64,33 @@ export const createProduct = async (req, res) => {
       sellingPrice = undefined;
       mrp = undefined;
 
+      // Validate each variant
       for (const v of variants) {
-        if (!v.sku || !v.price || v.stockQuantity === undefined) {
+        if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
           return res.status(400).json({
             success: false,
-            message: "Each variant must have sku, price and stockQuantity",
+            message: "Each variant must have sku, price, and stockQuantity",
           });
         }
+        if (v.price < 0 || v.stockQuantity < 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Variant price and stockQuantity cannot be negative",
+          });
+        }
+        // Check global uniqueness of variant SKU
+        const exists = await Product.findOne({ "variants.sku": v.sku });
+        if (exists) {
+          return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
+        }
       }
+
+      // Check duplicate SKUs within product
+      const skus = variants.map(v => v.sku);
+      if (skus.length !== new Set(skus).size) {
+        return res.status(400).json({ success: false, message: "Duplicate SKUs within variants" });
+      }
+
     } else {
       // Non-variant products must have SKU and sellingPrice
       if (!sku || !sellingPrice) {
@@ -80,6 +99,9 @@ export const createProduct = async (req, res) => {
           message: "Non-variant product must have sku and sellingPrice",
         });
       }
+      // Check global uniqueness of root SKU
+      const existingSKU = await Product.findOne({ sku });
+      if (existingSKU) return res.status(400).json({ success: false, message: `Duplicate SKU: ${sku}` });
     }
 
     // HSN validation
@@ -121,7 +143,6 @@ export const createProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Create product error:", error);
-    // Duplicate key error handling
     if (error.code === 11000) {
       return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
     }
@@ -144,6 +165,49 @@ export const updateProduct = async (req, res) => {
 
     const existingProduct = await Product.findById(req.params.id);
     if (!existingProduct) return res.status(404).json({ success: false, message: "Product not found" });
+
+    /* ===== VARIANT LOGIC ===== */
+    if (updateData.variants.length > 0) {
+      updateData.sku = undefined; // no root SKU
+
+      // Validate each variant
+      for (const v of updateData.variants) {
+        if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
+          return res.status(400).json({
+            success: false,
+            message: "Each variant must have sku, price, and stockQuantity",
+          });
+        }
+        if (v.price < 0 || v.stockQuantity < 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Variant price and stockQuantity cannot be negative",
+          });
+        }
+        // Check global uniqueness excluding current product
+        const exists = await Product.findOne({ 
+          "variants.sku": v.sku, 
+          _id: { $ne: req.params.id } 
+        });
+        if (exists) return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
+      }
+
+      // Check duplicate SKUs within product
+      const skus = updateData.variants.map(v => v.sku);
+      if (skus.length !== new Set(skus).size) {
+        return res.status(400).json({ success: false, message: "Duplicate SKUs within variants" });
+      }
+
+    } else {
+      // Non-variant product must have SKU
+      if (!updateData.sku && !existingProduct.variants.length) {
+        return res.status(400).json({ success: false, message: "Non-variant product must have SKU" });
+      }
+      if (updateData.sku) {
+        const existingSKU = await Product.findOne({ sku: updateData.sku, _id: { $ne: req.params.id } });
+        if (existingSKU) return res.status(400).json({ success: false, message: `Duplicate SKU: ${updateData.sku}` });
+      }
+    }
 
     /* ===== IMAGE UPDATE ===== */
     if (Array.isArray(req.files) && req.files.length > 0) {
