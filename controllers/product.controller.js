@@ -4,11 +4,16 @@ import { uploadImage, deleteImage } from "../utils/cloudinary.js";
 
 /* ================= HELPER ================= */
 const parseJSON = (value, fallback) => {
+  if (!value) return fallback;
   try {
     return typeof value === "string" ? JSON.parse(value) : value;
   } catch {
     return fallback;
   }
+};
+
+const generateSlug = (text) => {
+  return text.toLowerCase().replace(/\s+/g, "-");
 };
 
 /* ================= CREATE PRODUCT ================= */
@@ -48,6 +53,8 @@ export const createProduct = async (req, res) => {
     tags = parseJSON(tags, []);
     images = parseJSON(images, []);
 
+    if (!slug) slug = generateSlug(name);
+
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode) {
       return res.status(400).json({ message: "Missing required fields" });
     }
@@ -78,13 +85,17 @@ export const createProduct = async (req, res) => {
       sku = undefined;
 
       for (const v of variants) {
-        if (!v.sku || !v.price) {
-          return res.status(400).json({ message: "Each variant must have SKU and price" });
+        if (!v.sku || !v.price || !v.stockQuantity) {
+          return res.status(400).json({
+            message: "Each variant must have sku, price and stockQuantity",
+          });
         }
       }
     } else {
       if (!sellingPrice || !sku) {
-        return res.status(400).json({ message: "Non-variant product must have sellingPrice and SKU" });
+        return res.status(400).json({
+          message: "Non-variant product must have sellingPrice and SKU",
+        });
       }
     }
 
@@ -99,7 +110,7 @@ export const createProduct = async (req, res) => {
       productKey,
       description,
       category,
-      categoryKey: categoryDoc.categoryKey || slug.toLowerCase(),
+      categoryKey: categoryDoc.categoryKey || generateSlug(categoryDoc.name),
       images: finalImages,
       mrp,
       sellingPrice,
@@ -118,7 +129,7 @@ export const createProduct = async (req, res) => {
       supplier,
       shipping,
       tags,
-      isRecommended,
+      isRecommended: isRecommended === "true" || isRecommended === true,
       status: status.toLowerCase(),
     });
 
@@ -150,12 +161,25 @@ export const getProducts = async (req, res) => {
 
     if (categoryKey) filter.categoryKey = categoryKey;
     if (stockStatus) filter.stockStatus = stockStatus;
-    if (isRecommended) filter.isRecommended = true;
+
+    if (isRecommended !== undefined) {
+      filter.isRecommended = isRecommended === "true";
+    }
 
     if (minPrice || maxPrice) {
       filter.$or = [
-        { sellingPrice: { ...(minPrice && { $gte: Number(minPrice) }), ...(maxPrice && { $lte: Number(maxPrice) }) } },
-        { "variants.price": { ...(minPrice && { $gte: Number(minPrice) }), ...(maxPrice && { $lte: Number(maxPrice) }) } },
+        {
+          sellingPrice: {
+            ...(minPrice && { $gte: Number(minPrice) }),
+            ...(maxPrice && { $lte: Number(maxPrice) }),
+          },
+        },
+        {
+          "variants.price": {
+            ...(minPrice && { $gte: Number(minPrice) }),
+            ...(maxPrice && { $lte: Number(maxPrice) }),
+          },
+        },
       ];
     }
 
@@ -194,14 +218,31 @@ export const updateProduct = async (req, res) => {
     /* IMAGE UPDATE */
     if (req.files && req.files.length > 0) {
       const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
-      updateData.images = uploads.map(img => ({ url: img.secure_url, public_id: img.public_id, alt: "" }));
+      const newImages = uploads.map(img => ({
+        url: img.secure_url,
+        public_id: img.public_id,
+        alt: "",
+      }));
 
-      const existing = await Product.findById(req.params.id);
-      if (existing) {
-        for (const img of existing.images) {
-          await deleteImage(img.public_id);
+      updateData.images = newImages;
+
+      const updatedProduct = await Product.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true, runValidators: true }
+      );
+
+      if (updatedProduct) {
+        for (const img of updatedProduct.images) {
+          if (img.public_id) await deleteImage(img.public_id);
         }
       }
+
+      return res.json({
+        success: true,
+        message: "Product updated successfully",
+        product: updatedProduct,
+      });
     }
 
     const updated = await Product.findByIdAndUpdate(
@@ -228,7 +269,7 @@ export const deleteProduct = async (req, res) => {
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     for (const img of product.images) {
-      await deleteImage(img.public_id);
+      if (img.public_id) await deleteImage(img.public_id);
     }
 
     await product.deleteOne();
