@@ -1,20 +1,25 @@
 import InfoSection from "../models/infosection.model.js";
+import Category from "../models/category.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
 // ===== Helper: get file by fieldname =====
 const getFileByField = (files, field) => files?.find(f => f.fieldname === field);
 
-// ===== Create InfoSection =====
+// ===== CREATE InfoSection =====
 export const createInfoSection = async (req, res) => {
   try {
-    // Ensure req.body exists (important for multipart/form-data)
     const body = req.body || {};
-    const title = body.title;
+    const { title, subtitle = "", description = "", cards: cardsRaw, category } = body;
+
     if (!title) return res.status(400).json({ message: "Title is required" });
 
-    const subtitle = body.subtitle || "";
-    const description = body.description || "";
-    const cardsRaw = body.cards || "[]";
+    // ===== Validate category (optional) =====
+    let categoryId = null;
+    if (category) {
+      const categoryExists = await Category.findById(category);
+      if (!categoryExists) return res.status(400).json({ message: "Invalid category ID" });
+      categoryId = category;
+    }
 
     // ===== Main image =====
     let imageUrl = "/images/placeholder.png";
@@ -24,12 +29,14 @@ export const createInfoSection = async (req, res) => {
       imageUrl = result.secure_url;
     }
 
-    // ===== Cards images =====
-    let cardsData;
-    try {
-      cardsData = JSON.parse(cardsRaw);
-    } catch {
-      cardsData = [];
+    // ===== Cards handling =====
+    let cardsData = [];
+    if (cardsRaw) {
+      try {
+        cardsData = JSON.parse(cardsRaw);
+      } catch {
+        cardsData = [];
+      }
     }
 
     if (!Array.isArray(cardsData)) cardsData = [];
@@ -53,7 +60,11 @@ export const createInfoSection = async (req, res) => {
       description,
       image: imageUrl,
       cards: cardsData,
+      category: categoryId,
     });
+
+    // Populate category info for frontend
+    await infoSection.populate("category", "categoryKey pageTitle");
 
     res.status(201).json(infoSection);
   } catch (error) {
@@ -62,10 +73,12 @@ export const createInfoSection = async (req, res) => {
   }
 };
 
-// ===== Get all InfoSections =====
+// ===== GET ALL InfoSections =====
 export const getAllInfoSections = async (req, res) => {
   try {
-    const sections = await InfoSection.find().sort({ createdAt: -1 });
+    const sections = await InfoSection.find()
+      .sort({ createdAt: -1 })
+      .populate("category", "categoryKey pageTitle");
     res.status(200).json(sections);
   } catch (error) {
     console.error("Get All InfoSections Error:", error);
@@ -73,10 +86,11 @@ export const getAllInfoSections = async (req, res) => {
   }
 };
 
-// ===== Get InfoSection by ID =====
+// ===== GET InfoSection BY ID =====
 export const getInfoSectionById = async (req, res) => {
   try {
-    const section = await InfoSection.findById(req.params.id);
+    const section = await InfoSection.findById(req.params.id)
+      .populate("category", "categoryKey pageTitle");
     if (!section) return res.status(404).json({ message: "InfoSection not found" });
     res.status(200).json(section);
   } catch (error) {
@@ -85,16 +99,22 @@ export const getInfoSectionById = async (req, res) => {
   }
 };
 
-// ===== Update InfoSection =====
+// ===== UPDATE InfoSection =====
 export const updateInfoSection = async (req, res) => {
   try {
     const body = req.body || {};
     const updateData = {};
 
-    // Only update fields if they exist
     if (body.title) updateData.title = body.title;
     if (body.subtitle) updateData.subtitle = body.subtitle;
     if (body.description) updateData.description = body.description;
+
+    // ===== Update category =====
+    if (body.category) {
+      const categoryExists = await Category.findById(body.category);
+      if (!categoryExists) return res.status(400).json({ message: "Invalid category ID" });
+      updateData.category = body.category;
+    }
 
     // ===== Main image =====
     const mainImage = getFileByField(req.files, "image");
@@ -103,9 +123,9 @@ export const updateInfoSection = async (req, res) => {
       updateData.image = result.secure_url;
     }
 
-    // ===== Cards images =====
+    // ===== Cards handling =====
     if (body.cards) {
-      let cardsData;
+      let cardsData = [];
       try {
         cardsData = JSON.parse(body.cards);
       } catch {
@@ -131,7 +151,7 @@ export const updateInfoSection = async (req, res) => {
     const section = await InfoSection.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
-    });
+    }).populate("category", "categoryKey pageTitle");
 
     if (!section) return res.status(404).json({ message: "InfoSection not found" });
     res.status(200).json(section);
@@ -141,7 +161,7 @@ export const updateInfoSection = async (req, res) => {
   }
 };
 
-// ===== Delete InfoSection =====
+// ===== DELETE InfoSection =====
 export const deleteInfoSection = async (req, res) => {
   try {
     const section = await InfoSection.findByIdAndDelete(req.params.id);
