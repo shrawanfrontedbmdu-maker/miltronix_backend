@@ -85,15 +85,15 @@ export const createProduct = async (req, res) => {
 
     /* ===== VARIANT LOGIC ===== */
     if (variants.length > 0) {
-      sellingPrice = undefined;
-      mrp = undefined;
-      sku = undefined;
+      delete sku;
+      delete mrp;
+      delete sellingPrice;
 
       for (const v of variants) {
-        if (!v.sku || !v.price) {
+        if (!v.sku || v.price === undefined || v.stock === undefined) {
           return res.status(400).json({
             success: false,
-            message: "Each variant must have sku and price",
+            message: "Each variant must have sku, price and stock",
           });
         }
       }
@@ -110,7 +110,6 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid HSN code" });
     }
 
-    /* ===== CREATE PRODUCT ===== */
     const product = await Product.create({
       name,
       slug,
@@ -169,6 +168,12 @@ export const updateProduct = async (req, res) => {
     const existingProduct = await Product.findById(req.params.id);
     if (!existingProduct) {
       return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    if (updateData.variants && updateData.variants.length > 0) {
+      delete updateData.sku;
+      delete updateData.mrp;
+      delete updateData.sellingPrice;
     }
 
     /* IMAGE UPDATE */
