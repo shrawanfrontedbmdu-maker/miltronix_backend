@@ -15,7 +15,7 @@ const shippingSchema = new mongoose.Schema({
 }, { _id: false });
 
 const variantSchema = new mongoose.Schema({
-  sku: { type: String, required: true, trim: true }, // must be unique at app level
+  sku: { type: String, required: true, trim: true, unique: true ,sparse: true}, // must be unique at app level
   price: { type: Number, required: true, min: 0 },
   stockQuantity: { type: Number, required: true, min: 0 },
   attributes: {
@@ -55,9 +55,10 @@ const productSchema = new mongoose.Schema({
     unique: true,
     sparse: true, // important to avoid E11000 null
     trim: true,
-    required: function () {
-      return !this.variants || this.variants.length === 0;
-    },
+    // required: function () {
+    //   return !this.variants || this.variants.length === 0;
+    // },
+    required:true
   },
 
   stockQuantity: { type: Number, default: 0, min: 0 },
