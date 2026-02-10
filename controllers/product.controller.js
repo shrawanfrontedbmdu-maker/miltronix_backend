@@ -83,34 +83,8 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: "At least one image required" });
     }
 
-    /* ===== VARIANT LOGIC ===== */
-    if (variants.length > 0) {
-      delete sku;
-      delete mrp;
-      delete sellingPrice;
-
-      for (const v of variants) {
-        if (!v.sku || v.price === undefined || v.stock === undefined) {
-          return res.status(400).json({
-            success: false,
-            message: "Each variant must have sku, price and stock",
-          });
-        }
-      }
-    } else {
-      if (!sellingPrice || !sku) {
-        return res.status(400).json({
-          success: false,
-          message: "Non-variant product must have sellingPrice and sku",
-        });
-      }
-    }
-
-    if (!/^[0-9]{2,6}$/.test(hsnCode)) {
-      return res.status(400).json({ success: false, message: "Invalid HSN code" });
-    }
-
-    const product = await Product.create({
+    /* ===== BASE PRODUCT OBJECT ===== */
+    const productData = {
       name,
       slug,
       productKey,
@@ -118,9 +92,6 @@ export const createProduct = async (req, res) => {
       category,
       categoryKey: categoryDoc.categoryKey || generateSlug(categoryDoc.name),
       images: finalImages,
-      mrp,
-      sellingPrice,
-      sku,
       brand,
       variants,
       stockStatus: stockStatus || "in-stock",
@@ -137,7 +108,37 @@ export const createProduct = async (req, res) => {
       tags,
       isRecommended: isRecommended === true || isRecommended === "true",
       status: status.toLowerCase(),
-    });
+    };
+
+    /* ===== VARIANT LOGIC ===== */
+    if (variants.length > 0) {
+      for (const v of variants) {
+        if (!v.sku || v.price === undefined || v.stock === undefined) {
+          return res.status(400).json({
+            success: false,
+            message: "Each variant must have sku, price and stock",
+          });
+        }
+      }
+    } else {
+      if (!sellingPrice || !sku) {
+        return res.status(400).json({
+          success: false,
+          message: "Non-variant product must have sellingPrice and sku",
+        });
+      }
+
+      productData.sellingPrice = sellingPrice;
+      productData.mrp = mrp;
+      productData.sku = sku;
+    }
+
+    /* ===== HSN VALIDATION ===== */
+    if (!/^[0-9]{2,6}$/.test(hsnCode)) {
+      return res.status(400).json({ success: false, message: "Invalid HSN code" });
+    }
+
+    const product = await Product.create(productData);
 
     res.status(201).json({
       success: true,
@@ -170,12 +171,6 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    if (updateData.variants && updateData.variants.length > 0) {
-      delete updateData.sku;
-      delete updateData.mrp;
-      delete updateData.sellingPrice;
-    }
-
     /* IMAGE UPDATE */
     if (Array.isArray(req.files) && req.files.length > 0) {
       const uploads = await Promise.all(
@@ -193,6 +188,13 @@ export const updateProduct = async (req, res) => {
       }
 
       updateData.images = newImages;
+    }
+
+    /* Variant vs non-variant update */
+    if (updateData.variants && updateData.variants.length > 0) {
+      updateData.sku = undefined;
+      updateData.mrp = undefined;
+      updateData.sellingPrice = undefined;
     }
 
     const updated = await Product.findByIdAndUpdate(
