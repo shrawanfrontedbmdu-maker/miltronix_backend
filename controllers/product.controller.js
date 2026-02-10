@@ -45,7 +45,6 @@ export const createProduct = async (req, res) => {
       status = "active",
     } = req.body;
 
-    // parse JSON strings if sent as string
     variants = parseJSON(variants, []);
     supplier = parseJSON(supplier, []);
     shipping = parseJSON(shipping, []);
@@ -54,7 +53,7 @@ export const createProduct = async (req, res) => {
 
     if (!slug) slug = generateSlug(name);
 
-    // Required fields check
+    // Required fields
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
@@ -81,13 +80,12 @@ export const createProduct = async (req, res) => {
 
     /* ===== VARIANT LOGIC ===== */
     if (variants.length > 0) {
-      // variants exist → main product SKU & price are ignored
+      sku = undefined; // root SKU not required
       sellingPrice = undefined;
       mrp = undefined;
-      sku = undefined;
 
       for (const v of variants) {
-        if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
+        if (!v.sku || !v.price || v.stockQuantity === undefined) {
           return res.status(400).json({
             success: false,
             message: "Each variant must have sku, price and stockQuantity",
@@ -95,17 +93,15 @@ export const createProduct = async (req, res) => {
         }
       }
     } else {
-      // no variants → main product must have sellingPrice & SKU
-      if (!sellingPrice || !sku) {
+      if (!sku || !sellingPrice) {
         return res.status(400).json({
           success: false,
-          message: "Non-variant product must have sellingPrice and sku",
+          message: "Non-variant product must have sku and sellingPrice",
         });
       }
     }
 
-    // HSN validation (2,4,6 digits)
-    if (!/^[0-9]{2}([0-9]{2})?([0-9]{2})?$/.test(hsnCode)) {
+    if (!/^[0-9]{2,6}$/.test(hsnCode)) {
       return res.status(400).json({ success: false, message: "Invalid HSN code" });
     }
 
@@ -139,11 +135,7 @@ export const createProduct = async (req, res) => {
       status: status.toLowerCase(),
     });
 
-    res.status(201).json({
-      success: true,
-      message: "Product created successfully",
-      product,
-    });
+    res.status(201).json({ success: true, message: "Product created successfully", product });
 
   } catch (error) {
     console.error("Create product error:", error);
@@ -157,9 +149,9 @@ export const updateProduct = async (req, res) => {
     let updateData = { ...req.body };
 
     updateData.variants = parseJSON(updateData.variants, []);
-    updateData.tags = parseJSON(updateData.tags, []);
     updateData.supplier = parseJSON(updateData.supplier, []);
     updateData.shipping = parseJSON(updateData.shipping, []);
+    updateData.tags = parseJSON(updateData.tags, []);
     updateData.images = parseJSON(updateData.images, []);
 
     if (updateData.status) updateData.status = updateData.status.toLowerCase();
@@ -169,18 +161,12 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    /* IMAGE UPDATE */
+    /* ===== IMAGE UPDATE ===== */
     if (Array.isArray(req.files) && req.files.length > 0) {
-      const uploads = await Promise.all(
-        req.files.map(file => uploadImage(file.buffer))
-      );
-      const newImages = uploads.map(img => ({
-        url: img.secure_url,
-        public_id: img.public_id,
-        alt: "",
-      }));
+      const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
+      const newImages = uploads.map(img => ({ url: img.secure_url, public_id: img.public_id, alt: "" }));
 
-      // delete old images
+      // Delete old images from Cloudinary
       for (const img of existingProduct.images) {
         if (img.public_id) await deleteImage(img.public_id);
       }
@@ -188,33 +174,9 @@ export const updateProduct = async (req, res) => {
       updateData.images = newImages;
     }
 
-    // Variant validation
-    if (updateData.variants.length > 0) {
-      for (const v of updateData.variants) {
-        if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
-          return res.status(400).json({
-            success: false,
-            message: "Each variant must have sku, price and stockQuantity",
-          });
-        }
-      }
-      // remove main product price & SKU
-      updateData.sellingPrice = undefined;
-      updateData.mrp = undefined;
-      updateData.sku = undefined;
-    }
+    const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
 
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    res.json({
-      success: true,
-      message: "Product updated successfully",
-      product: updated,
-    });
+    res.json({ success: true, message: "Product updated successfully", product: updated });
 
   } catch (error) {
     console.error("Update product error:", error);
@@ -226,9 +188,7 @@ export const updateProduct = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
 
     for (const img of product.images) {
       if (img.public_id) await deleteImage(img.public_id);
@@ -236,10 +196,7 @@ export const deleteProduct = async (req, res) => {
 
     await product.deleteOne();
 
-    res.json({
-      success: true,
-      message: "Product deleted successfully",
-    });
+    res.json({ success: true, message: "Product deleted successfully" });
 
   } catch (error) {
     console.error("Delete product error:", error);

@@ -3,25 +3,25 @@ import mongoose from "mongoose";
 /* ================= SUB SCHEMAS ================= */
 
 const supplierSchema = new mongoose.Schema({
-  name: String,
-  contact: String,
-  email: String,
+  name: { type: String, trim: true },
+  contact: { type: String, trim: true },
+  email: { type: String, trim: true, lowercase: true },
 }, { _id: false });
 
 const shippingSchema = new mongoose.Schema({
   charges: { type: Number, min: 0 },
-  deliveryTime: String,
-  restrictions: String,
+  deliveryTime: { type: String, trim: true },
+  restrictions: { type: String, trim: true },
 }, { _id: false });
 
 const variantSchema = new mongoose.Schema({
-  sku: { type: String, required: true, trim: true },
+  sku: { type: String, required: true, trim: true }, // must be unique at app level
   price: { type: Number, required: true, min: 0 },
-  stockQuantity: { type: Number, default: 0 },
+  stockQuantity: { type: Number, required: true, min: 0 },
   attributes: {
-    color: String,
-    size: String,
-    model: String,
+    color: { type: String, trim: true },
+    size: { type: String, trim: true },
+    model: { type: String, trim: true },
   },
   isActive: { type: Boolean, default: true },
 }, { _id: false });
@@ -29,42 +29,48 @@ const variantSchema = new mongoose.Schema({
 /* ================= PRODUCT SCHEMA ================= */
 
 const productSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  slug: { type: String, required: true, unique: true },
-  productKey: { type: String, required: true, unique: true },
-  description: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
+  slug: { type: String, required: true, unique: true, lowercase: true },
+  productKey: { type: String, required: true, unique: true, trim: true },
+  description: { type: String, required: true, trim: true },
 
   category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
-  categoryKey: { type: String, required: true },
+  categoryKey: { type: String, required: true, lowercase: true },
 
-  images: [{
-    url: { type: String, required: true },
-    public_id: { type: String, required: true },
-    alt: String
-  }],
+  images: [
+    {
+      url: { type: String, required: true },
+      public_id: { type: String, required: true },
+      alt: { type: String, trim: true },
+    },
+  ],
 
-  mrp: Number,
-  sellingPrice: Number,
+  mrp: { type: Number, min: 0 },
+  sellingPrice: { type: Number, min: 0 },
 
-  brand: String,
+  brand: { type: String, trim: true },
 
-  // 👇 FIXED SKU
+  // Root SKU required only if there are no variants
   sku: {
     type: String,
     unique: true,
-    sparse: true
+    sparse: true,
+    trim: true,
+    required: function () {
+      return !this.variants || this.variants.length === 0;
+    },
   },
 
-  stockQuantity: { type: Number, default: 0 },
+  stockQuantity: { type: Number, default: 0, min: 0 },
   stockStatus: { type: String, enum: ["in-stock", "out-of-stock"], default: "in-stock" },
 
   variants: { type: [variantSchema], default: [] },
 
-  warranty: { type: String, required: true },
-  returnPolicy: { type: String, required: true },
-  hsnCode: { type: String, required: true },
+  warranty: { type: String, required: true, trim: true },
+  returnPolicy: { type: String, required: true, trim: true },
+  hsnCode: { type: String, required: true, trim: true, match: /^[0-9]{2,6}$/ },
 
-  barcode: { type: String, unique: true, sparse: true },
+  barcode: { type: String, unique: true, sparse: true, trim: true },
 
   supplier: { type: [supplierSchema], default: [] },
   shipping: { type: [shippingSchema], default: [] },
@@ -72,8 +78,8 @@ const productSchema = new mongoose.Schema({
   isRecommended: { type: Boolean, default: false },
   status: { type: String, enum: ["active", "inactive"], default: "active" },
 
-  tags: { type: [String], default: [] }
+  tags: { type: [String], default: [] },
 
-}, { timestamps: true });
+}, { timestamps: true, versionKey: false });
 
 export default mongoose.model("Product", productSchema);
