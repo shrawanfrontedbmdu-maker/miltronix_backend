@@ -26,7 +26,6 @@ export const createProduct = async (req, res) => {
       isRecommended = false, status = "active"
     } = req.body;
 
-    // Parse JSON fields
     variants = parseJSON(variants, []);
     supplier = parseJSON(supplier, []);
     shipping = parseJSON(shipping, []);
@@ -60,34 +59,47 @@ export const createProduct = async (req, res) => {
 
     /* ===== VARIANT LOGIC ===== */
     if (variants.length > 0) {
+      // Root SKU not needed for variant products
       sku = undefined;
       sellingPrice = undefined;
       mrp = undefined;
 
-      // Validate variants
-      const skusSet = new Set();
+      // Validate each variant
       for (const v of variants) {
         if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
-          return res.status(400).json({ success: false, message: "Each variant must have sku, price, and stockQuantity" });
+          return res.status(400).json({
+            success: false,
+            message: "Each variant must have sku, price, and stockQuantity",
+          });
         }
         if (v.price < 0 || v.stockQuantity < 0) {
-          return res.status(400).json({ success: false, message: "Variant price and stockQuantity cannot be negative" });
+          return res.status(400).json({
+            success: false,
+            message: "Variant price and stockQuantity cannot be negative",
+          });
         }
-        if (skusSet.has(v.sku)) {
-          return res.status(400).json({ success: false, message: `Duplicate SKU within variants: ${v.sku}` });
-        }
-        skusSet.add(v.sku);
-
-        // Global uniqueness check
+        // Check global uniqueness of variant SKU
         const exists = await Product.findOne({ "variants.sku": v.sku });
-        if (exists) return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
+        if (exists) {
+          return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
+        }
+      }
+
+      // Check duplicate SKUs within product
+      const skus = variants.map(v => v.sku);
+      if (skus.length !== new Set(skus).size) {
+        return res.status(400).json({ success: false, message: "Duplicate SKUs within variants" });
       }
 
     } else {
-      // Non-variant product must have SKU and sellingPrice
+      // Non-variant products must have SKU and sellingPrice
       if (!sku || !sellingPrice) {
-        return res.status(400).json({ success: false, message: "Non-variant product must have sku and sellingPrice" });
+        return res.status(400).json({
+          success: false,
+          message: "Non-variant product must have sku and sellingPrice",
+        });
       }
+      // Check global uniqueness of root SKU
       const existingSKU = await Product.findOne({ sku });
       if (existingSKU) return res.status(400).json({ success: false, message: `Duplicate SKU: ${sku}` });
     }
@@ -158,20 +170,32 @@ export const updateProduct = async (req, res) => {
     if (updateData.variants.length > 0) {
       updateData.sku = undefined; // no root SKU
 
-      const skusSet = new Set();
+      // Validate each variant
       for (const v of updateData.variants) {
         if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
-          return res.status(400).json({ success: false, message: "Each variant must have sku, price, and stockQuantity" });
+          return res.status(400).json({
+            success: false,
+            message: "Each variant must have sku, price, and stockQuantity",
+          });
         }
         if (v.price < 0 || v.stockQuantity < 0) {
-          return res.status(400).json({ success: false, message: "Variant price and stockQuantity cannot be negative" });
+          return res.status(400).json({
+            success: false,
+            message: "Variant price and stockQuantity cannot be negative",
+          });
         }
-        if (skusSet.has(v.sku)) return res.status(400).json({ success: false, message: `Duplicate SKU within variants: ${v.sku}` });
-        skusSet.add(v.sku);
-
-        // Global uniqueness excluding current product
-        const exists = await Product.findOne({ "variants.sku": v.sku, _id: { $ne: req.params.id } });
+        // Check global uniqueness excluding current product
+        const exists = await Product.findOne({ 
+          "variants.sku": v.sku, 
+          _id: { $ne: req.params.id } 
+        });
         if (exists) return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
+      }
+
+      // Check duplicate SKUs within product
+      const skus = updateData.variants.map(v => v.sku);
+      if (skus.length !== new Set(skus).size) {
+        return res.status(400).json({ success: false, message: "Duplicate SKUs within variants" });
       }
 
     } else {
@@ -204,7 +228,9 @@ export const updateProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Update product error:", error);
-    if (error.code === 11000) return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -220,6 +246,7 @@ export const deleteProduct = async (req, res) => {
     }
 
     await product.deleteOne();
+
     res.json({ success: true, message: "Product deleted successfully" });
 
   } catch (error) {
