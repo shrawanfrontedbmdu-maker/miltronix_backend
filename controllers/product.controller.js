@@ -12,9 +12,7 @@ const parseJSON = (value, fallback) => {
   }
 };
 
-const generateSlug = (text) => {
-  return text.toLowerCase().replace(/\s+/g, "-");
-};
+const generateSlug = (text) => text.toLowerCase().replace(/\s+/g, "-");
 
 /* ================= CREATE PRODUCT ================= */
 export const createProduct = async (req, res) => {
@@ -65,14 +63,14 @@ export const createProduct = async (req, res) => {
     /* ===== IMAGE HANDLING ===== */
     let finalImages = [];
 
-    if (req.files && req.files.length > 0) {
+    if (Array.isArray(req.files) && req.files.length > 0) {
       finalImages = await Promise.all(
         req.files.map(async (file) => {
           const img = await uploadImage(file.buffer);
           return { url: img.secure_url, public_id: img.public_id, alt: "" };
         })
       );
-    } else if (images && images.length > 0) {
+    } else if (Array.isArray(images) && images.length > 0) {
       finalImages = images;
     } else {
       return res.status(400).json({ message: "At least one product image is required" });
@@ -99,7 +97,6 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    /* ===== HSN VALIDATION ===== */
     if (!/^\d{2}(\d{2})?(\d{2})?$/.test(hsnCode)) {
       return res.status(400).json({ message: "HSN must be 2, 4, or 6 digits" });
     }
@@ -129,7 +126,7 @@ export const createProduct = async (req, res) => {
       supplier,
       shipping,
       tags,
-      isRecommended: isRecommended === "true" || isRecommended === true,
+      isRecommended: isRecommended === true || isRecommended === "true",
       status: status.toLowerCase(),
     });
 
@@ -142,63 +139,6 @@ export const createProduct = async (req, res) => {
   } catch (error) {
     console.error("Create product error:", error);
     res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/* ================= GET PRODUCTS ================= */
-export const getProducts = async (req, res) => {
-  try {
-    const { search, categoryKey, minPrice, maxPrice, stockStatus, isRecommended } = req.query;
-
-    const filter = { status: "active" };
-
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    if (categoryKey) filter.categoryKey = categoryKey;
-    if (stockStatus) filter.stockStatus = stockStatus;
-
-    if (isRecommended !== undefined) {
-      filter.isRecommended = isRecommended === "true";
-    }
-
-    if (minPrice || maxPrice) {
-      filter.$or = [
-        {
-          sellingPrice: {
-            ...(minPrice && { $gte: Number(minPrice) }),
-            ...(maxPrice && { $lte: Number(maxPrice) }),
-          },
-        },
-        {
-          "variants.price": {
-            ...(minPrice && { $gte: Number(minPrice) }),
-            ...(maxPrice && { $lte: Number(maxPrice) }),
-          },
-        },
-      ];
-    }
-
-    const products = await Product.find(filter).sort({ createdAt: -1 });
-    res.json(products);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-/* ================= GET PRODUCT BY ID ================= */
-export const getProductById = async (req, res) => {
-  try {
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
-    res.json(product);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 };
 
@@ -215,8 +155,11 @@ export const updateProduct = async (req, res) => {
 
     if (updateData.status) updateData.status = updateData.status.toLowerCase();
 
+    const existingProduct = await Product.findById(req.params.id);
+    if (!existingProduct) return res.status(404).json({ message: "Product not found" });
+
     /* IMAGE UPDATE */
-    if (req.files && req.files.length > 0) {
+    if (Array.isArray(req.files) && req.files.length > 0) {
       const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
       const newImages = uploads.map(img => ({
         url: img.secure_url,
@@ -224,25 +167,12 @@ export const updateProduct = async (req, res) => {
         alt: "",
       }));
 
-      updateData.images = newImages;
-
-      const updatedProduct = await Product.findByIdAndUpdate(
-        req.params.id,
-        updateData,
-        { new: true, runValidators: true }
-      );
-
-      if (updatedProduct) {
-        for (const img of updatedProduct.images) {
-          if (img.public_id) await deleteImage(img.public_id);
-        }
+      // delete old images
+      for (const img of existingProduct.images) {
+        if (img.public_id) await deleteImage(img.public_id);
       }
 
-      return res.json({
-        success: true,
-        message: "Product updated successfully",
-        product: updatedProduct,
-      });
+      updateData.images = newImages;
     }
 
     const updated = await Product.findByIdAndUpdate(
