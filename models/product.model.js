@@ -47,14 +47,13 @@ const productSchema = new mongoose.Schema({
 
   mrp: { type: Number, min: 0 },
   sellingPrice: { type: Number, min: 0 },
-
   brand: { type: String, trim: true },
 
   // Root SKU required only if there are no variants
   sku: {
     type: String,
     unique: true,
-    sparse: true,
+    sparse: true, // important to avoid E11000 null
     trim: true,
     required: function () {
       return !this.variants || this.variants.length === 0;
@@ -81,5 +80,10 @@ const productSchema = new mongoose.Schema({
   tags: { type: [String], default: [] },
 
 }, { timestamps: true, versionKey: false });
+
+/* ================= INDEXES ================= */
+// Sparse ensures multiple null SKUs are allowed
+productSchema.index({ sku: 1 }, { unique: true, sparse: true });
+productSchema.index({ barcode: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model("Product", productSchema);
