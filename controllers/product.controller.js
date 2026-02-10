@@ -5,29 +5,11 @@ import { uploadImage, deleteImage } from "../utils/cloudinary.js";
 /* ================= HELPERS ================= */
 const parseJSON = (value, fallback) => {
   if (!value) return fallback;
-  try {
-    return typeof value === "string" ? JSON.parse(value) : value;
-  } catch {
-    return fallback;
-  }
+  try { return typeof value === "string" ? JSON.parse(value) : value; } 
+  catch { return fallback; }
 };
 
 const generateSlug = (text) => text.toLowerCase().trim().replace(/\s+/g, "-");
-
-/* ================= APP-LEVEL UNIQUENESS CHECK ================= */
-const isDuplicateSKU = async (sku, productId = null) => {
-  if (!sku) return false;
-  const query = { sku };
-  if (productId) query._id = { $ne: productId };
-  return !!(await Product.findOne(query));
-};
-
-const isDuplicateVariantSKU = async (variantSku, productId = null) => {
-  if (!variantSku) return false;
-  const query = { "variants.sku": variantSku };
-  if (productId) query._id = { $ne: productId };
-  return !!(await Product.findOne(query));
-};
 
 /* ================= CREATE PRODUCT ================= */
 export const createProduct = async (req, res) => {
@@ -49,7 +31,7 @@ export const createProduct = async (req, res) => {
 
     if (!slug) slug = generateSlug(name);
 
-    // Required fields
+    // Required fields check
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode)
       return res.status(400).json({ success: false, message: "Missing required fields" });
 
@@ -67,6 +49,8 @@ export const createProduct = async (req, res) => {
       );
     } else if (images.length > 0) {
       finalImages = images;
+    } else {
+      return res.status(400).json({ success: false, message: "At least one image is required" });
     }
 
     /* ===== VARIANT LOGIC ===== */
@@ -75,8 +59,7 @@ export const createProduct = async (req, res) => {
       sellingPrice = undefined;
       mrp = undefined;
 
-      // Validate variants
-      const skusSet = new Set();
+      // Validate variant fields & global uniqueness
       for (const v of variants) {
         if (!v.sku || v.price === undefined || v.stockQuantity === undefined)
           return res.status(400).json({ success: false, message: "Each variant must have sku, price, stockQuantity" });
@@ -84,21 +67,22 @@ export const createProduct = async (req, res) => {
         if (v.price < 0 || v.stockQuantity < 0)
           return res.status(400).json({ success: false, message: "Variant price or stockQuantity cannot be negative" });
 
-        if (skusSet.has(v.sku))
-          return res.status(400).json({ success: false, message: `Duplicate SKU within variants: ${v.sku}` });
-
-        if (await isDuplicateVariantSKU(v.sku))
-          return res.status(400).json({ success: false, message: `Duplicate variant SKU across products: ${v.sku}` });
-
-        skusSet.add(v.sku);
+        const exists = await Product.findOne({ "variants.sku": v.sku });
+        if (exists) return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
       }
-    } else {
-      // Non-variant product must have SKU & sellingPrice
-      if (!sku || sellingPrice === undefined)
-        return res.status(400).json({ success: false, message: "Non-variant product must have SKU and sellingPrice" });
 
-      if (await isDuplicateSKU(sku))
-        return res.status(400).json({ success: false, message: `Duplicate SKU: ${sku}` });
+      // Check duplicates inside variants array
+      const skus = variants.map(v => v.sku);
+      if (skus.length !== new Set(skus).size)
+        return res.status(400).json({ success: false, message: "Duplicate SKUs within variants" });
+
+    } else {
+      // Non-variant product must have SKU
+      if (!sku || !sellingPrice)
+        return res.status(400).json({ success: false, message: "Non-variant product must have sku and sellingPrice" });
+
+      const existingSKU = await Product.findOne({ sku });
+      if (existingSKU) return res.status(400).json({ success: false, message: `Duplicate SKU: ${sku}` });
     }
 
     // HSN validation
@@ -121,6 +105,8 @@ export const createProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Create product error:", error);
+    if (error.code === 11000)
+      return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -143,28 +129,28 @@ export const updateProduct = async (req, res) => {
     if (updateData.variants.length > 0) {
       updateData.sku = undefined;
 
-      const skusSet = new Set();
       for (const v of updateData.variants) {
         if (!v.sku || v.price === undefined || v.stockQuantity === undefined)
           return res.status(400).json({ success: false, message: "Each variant must have sku, price, stockQuantity" });
-
         if (v.price < 0 || v.stockQuantity < 0)
           return res.status(400).json({ success: false, message: "Variant price or stockQuantity cannot be negative" });
 
-        if (skusSet.has(v.sku))
-          return res.status(400).json({ success: false, message: `Duplicate SKU within variants: ${v.sku}` });
-
-        if (await isDuplicateVariantSKU(v.sku, req.params.id))
-          return res.status(400).json({ success: false, message: `Duplicate variant SKU across products: ${v.sku}` });
-
-        skusSet.add(v.sku);
+        const exists = await Product.findOne({ "variants.sku": v.sku, _id: { $ne: req.params.id } });
+        if (exists) return res.status(400).json({ success: false, message: `Duplicate variant SKU: ${v.sku}` });
       }
+
+      const skus = updateData.variants.map(v => v.sku);
+      if (skus.length !== new Set(skus).size)
+        return res.status(400).json({ success: false, message: "Duplicate SKUs within variants" });
+
     } else {
       if (!updateData.sku && !existingProduct.variants.length)
         return res.status(400).json({ success: false, message: "Non-variant product must have SKU" });
 
-      if (updateData.sku && await isDuplicateSKU(updateData.sku, req.params.id))
-        return res.status(400).json({ success: false, message: `Duplicate SKU: ${updateData.sku}` });
+      if (updateData.sku) {
+        const existingSKU = await Product.findOne({ sku: updateData.sku, _id: { $ne: req.params.id } });
+        if (existingSKU) return res.status(400).json({ success: false, message: `Duplicate SKU: ${updateData.sku}` });
+      }
     }
 
     /* ===== IMAGE UPDATE ===== */
@@ -185,6 +171,8 @@ export const updateProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Update product error:", error);
+    if (error.code === 11000)
+      return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
     res.status(500).json({ success: false, message: error.message });
   }
 };
