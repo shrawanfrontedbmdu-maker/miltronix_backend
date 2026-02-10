@@ -2,7 +2,7 @@ import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
 import { uploadImage, deleteImage } from "../utils/cloudinary.js";
 
-/* Helper to parse JSON fields safely */
+/* ================= HELPER ================= */
 const parseJSON = (value, fallback) => {
   try {
     return typeof value === "string" ? JSON.parse(value) : value;
@@ -37,17 +37,17 @@ export const createProduct = async (req, res) => {
       supplier,
       shipping,
       tags,
+      images,
       isRecommended = false,
       status = "active",
     } = req.body;
 
-    // Parse JSON fields
     variants = parseJSON(variants, []);
     supplier = parseJSON(supplier, []);
     shipping = parseJSON(shipping, []);
     tags = parseJSON(tags, []);
+    images = parseJSON(images, []);
 
-    // Validate required fields
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode) {
       return res.status(400).json({ message: "Missing required fields" });
     }
@@ -55,23 +55,28 @@ export const createProduct = async (req, res) => {
     const categoryDoc = await Category.findById(category);
     if (!categoryDoc) return res.status(400).json({ message: "Invalid category" });
 
-    // Handle images
-    if (!req.files || req.files.length === 0) {
+    /* ===== IMAGE HANDLING ===== */
+    let finalImages = [];
+
+    if (req.files && req.files.length > 0) {
+      finalImages = await Promise.all(
+        req.files.map(async (file) => {
+          const img = await uploadImage(file.buffer);
+          return { url: img.secure_url, public_id: img.public_id, alt: "" };
+        })
+      );
+    } else if (images && images.length > 0) {
+      finalImages = images;
+    } else {
       return res.status(400).json({ message: "At least one product image is required" });
     }
 
-    const finalImages = await Promise.all(
-      req.files.map(async (file) => {
-        const img = await uploadImage(file.buffer);
-        return { url: img.secure_url, public_id: img.public_id, alt: "" };
-      })
-    );
-
-    // Variant / SKU logic
+    /* ===== VARIANT LOGIC ===== */
     if (variants.length > 0) {
       sellingPrice = undefined;
       mrp = undefined;
-      sku = undefined; // avoid duplicate null SKU
+      sku = undefined;
+
       for (const v of variants) {
         if (!v.sku || !v.price) {
           return res.status(400).json({ message: "Each variant must have SKU and price" });
@@ -83,7 +88,7 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // HSN validation
+    /* ===== HSN VALIDATION ===== */
     if (!/^\d{2}(\d{2})?(\d{2})?$/.test(hsnCode)) {
       return res.status(400).json({ message: "HSN must be 2, 4, or 6 digits" });
     }
@@ -117,7 +122,11 @@ export const createProduct = async (req, res) => {
       status: status.toLowerCase(),
     });
 
-    res.status(201).json({ success: true, message: "Product created successfully", product });
+    res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      product,
+    });
 
   } catch (error) {
     console.error("Create product error:", error);
@@ -152,6 +161,7 @@ export const getProducts = async (req, res) => {
 
     const products = await Product.find(filter).sort({ createdAt: -1 });
     res.json(products);
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -173,15 +183,16 @@ export const updateProduct = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    if (updateData.variants) updateData.variants = parseJSON(updateData.variants, []);
-    if (updateData.tags) updateData.tags = parseJSON(updateData.tags, []);
-    if (updateData.supplier) updateData.supplier = parseJSON(updateData.supplier, []);
-    if (updateData.shipping) updateData.shipping = parseJSON(updateData.shipping, []);
+    updateData.variants = parseJSON(updateData.variants, []);
+    updateData.tags = parseJSON(updateData.tags, []);
+    updateData.supplier = parseJSON(updateData.supplier, []);
+    updateData.shipping = parseJSON(updateData.shipping, []);
+    updateData.images = parseJSON(updateData.images, []);
 
     if (updateData.status) updateData.status = updateData.status.toLowerCase();
 
-    // Handle new images
-    if (req.files?.length > 0) {
+    /* IMAGE UPDATE */
+    if (req.files && req.files.length > 0) {
       const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
       updateData.images = uploads.map(img => ({ url: img.secure_url, public_id: img.public_id, alt: "" }));
 
@@ -193,8 +204,18 @@ export const updateProduct = async (req, res) => {
       }
     }
 
-    const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
-    res.json({ success: true, message: "Product updated", product: updated });
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+      product: updated,
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -211,7 +232,12 @@ export const deleteProduct = async (req, res) => {
     }
 
     await product.deleteOne();
-    res.json({ success: true, message: "Product deleted successfully" });
+
+    res.json({
+      success: true,
+      message: "Product deleted successfully",
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
