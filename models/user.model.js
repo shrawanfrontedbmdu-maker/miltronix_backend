@@ -6,9 +6,9 @@ const userSchema = new mongoose.Schema(
 
     email: { type: String, unique: true, sparse: true },
 
-    mobile: { type: String, unique: true, required: true },
+    mobile: { type: String, unique: true, sparse: true }, 
 
-    password: { type: String, required: true },
+    password: { type: String }, 
 
     otp: String,
     otpExpiry: Date,
@@ -17,6 +17,8 @@ const userSchema = new mongoose.Schema(
     resetOtpExpiry: Date,
 
     isVerified: { type: Boolean, default: false },
+
+    googleId: { type: String, unique: true, sparse: true }, 
   },
   { timestamps: true }
 );

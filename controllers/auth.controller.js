@@ -1,11 +1,15 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 import User from "../models/user.model.js";
 import { sendOtpSMS } from "../utils/sendOtp.js";
 
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// ---------------- HELPER ----------------
 const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
 
-// ---------------- SIGNUP ----------------
+// ---------------- SIGNUP (OTP) ----------------
 export const signup = async (req, res) => {
   try {
     const { fullName, email, mobile, password } = req.body;
@@ -34,14 +38,15 @@ export const signup = async (req, res) => {
       password: hashedPassword,
       otp,
       otpExpiry: Date.now() + 2 * 60 * 1000,
+      isVerified: false,
     });
+
     await sendOtpSMS(mobile, otp);
     res.status(201).json({ message: "OTP sent successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 // ---------------- VERIFY OTP ----------------
 export const verifyOtp = async (req, res) => {
@@ -57,13 +62,15 @@ export const verifyOtp = async (req, res) => {
     user.otp = null;
     user.otpExpiry = null;
     await user.save();
-    res.json({ message: "OTP verified successfully" });
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    res.json({ message: "OTP verified successfully", token });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// ---------------- LOGIN ----------------
+// ---------------- LOGIN (Password) ----------------
 export const login = async (req, res) => {
   try {
     const { mobile, password } = req.body;
@@ -127,7 +134,40 @@ export const resetPassword = async (req, res) => {
     user.resetOtp = null;
     user.resetOtpExpiry = null;
     await user.save();
+
     res.json({ message: "Password reset successful" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ---------------- GOOGLE LOGIN ----------------
+export const googleLogin = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ message: "ID token required" });
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId } = payload;
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        fullName: name,
+        email,
+        googleId,
+        isVerified: true,
+      });
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token, user });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
