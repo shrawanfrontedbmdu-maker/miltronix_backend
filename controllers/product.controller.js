@@ -12,8 +12,7 @@ const parseJSON = (value, fallback) => {
   }
 };
 
-const generateSlug = (text) =>
-  text.toLowerCase().trim().replace(/\s+/g, "-");
+const generateSlug = (text) => text.toLowerCase().trim().replace(/\s+/g, "-");
 
 /* ================= CREATE PRODUCT ================= */
 export const createProduct = async (req, res) => {
@@ -46,6 +45,7 @@ export const createProduct = async (req, res) => {
       status = "active",
     } = req.body;
 
+    // parse JSON strings if sent as string
     variants = parseJSON(variants, []);
     supplier = parseJSON(supplier, []);
     shipping = parseJSON(shipping, []);
@@ -54,6 +54,7 @@ export const createProduct = async (req, res) => {
 
     if (!slug) slug = generateSlug(name);
 
+    // Required fields check
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
@@ -65,16 +66,11 @@ export const createProduct = async (req, res) => {
 
     /* ===== IMAGE HANDLING ===== */
     let finalImages = [];
-
     if (Array.isArray(req.files) && req.files.length > 0) {
       finalImages = await Promise.all(
         req.files.map(async (file) => {
           const img = await uploadImage(file.buffer);
-          return {
-            url: img.secure_url,
-            public_id: img.public_id,
-            alt: "",
-          };
+          return { url: img.secure_url, public_id: img.public_id, alt: "" };
         })
       );
     } else if (Array.isArray(images) && images.length > 0) {
@@ -83,8 +79,38 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: "At least one image required" });
     }
 
-    /* ===== BASE PRODUCT OBJECT ===== */
-    const productData = {
+    /* ===== VARIANT LOGIC ===== */
+    if (variants.length > 0) {
+      // variants exist → main product SKU & price are ignored
+      sellingPrice = undefined;
+      mrp = undefined;
+      sku = undefined;
+
+      for (const v of variants) {
+        if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
+          return res.status(400).json({
+            success: false,
+            message: "Each variant must have sku, price and stockQuantity",
+          });
+        }
+      }
+    } else {
+      // no variants → main product must have sellingPrice & SKU
+      if (!sellingPrice || !sku) {
+        return res.status(400).json({
+          success: false,
+          message: "Non-variant product must have sellingPrice and sku",
+        });
+      }
+    }
+
+    // HSN validation (2,4,6 digits)
+    if (!/^[0-9]{2}([0-9]{2})?([0-9]{2})?$/.test(hsnCode)) {
+      return res.status(400).json({ success: false, message: "Invalid HSN code" });
+    }
+
+    /* ===== CREATE PRODUCT ===== */
+    const product = await Product.create({
       name,
       slug,
       productKey,
@@ -92,6 +118,9 @@ export const createProduct = async (req, res) => {
       category,
       categoryKey: categoryDoc.categoryKey || generateSlug(categoryDoc.name),
       images: finalImages,
+      mrp,
+      sellingPrice,
+      sku,
       brand,
       variants,
       stockStatus: stockStatus || "in-stock",
@@ -108,37 +137,7 @@ export const createProduct = async (req, res) => {
       tags,
       isRecommended: isRecommended === true || isRecommended === "true",
       status: status.toLowerCase(),
-    };
-
-    /* ===== VARIANT LOGIC ===== */
-    if (variants.length > 0) {
-      for (const v of variants) {
-        if (!v.sku || v.price === undefined || v.stock === undefined) {
-          return res.status(400).json({
-            success: false,
-            message: "Each variant must have sku, price and stock",
-          });
-        }
-      }
-    } else {
-      if (!sellingPrice || !sku) {
-        return res.status(400).json({
-          success: false,
-          message: "Non-variant product must have sellingPrice and sku",
-        });
-      }
-
-      productData.sellingPrice = sellingPrice;
-      productData.mrp = mrp;
-      productData.sku = sku;
-    }
-
-    /* ===== HSN VALIDATION ===== */
-    if (!/^[0-9]{2,6}$/.test(hsnCode)) {
-      return res.status(400).json({ success: false, message: "Invalid HSN code" });
-    }
-
-    const product = await Product.create(productData);
+    });
 
     res.status(201).json({
       success: true,
@@ -151,7 +150,6 @@ export const createProduct = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 /* ================= UPDATE PRODUCT ================= */
 export const updateProduct = async (req, res) => {
@@ -176,13 +174,13 @@ export const updateProduct = async (req, res) => {
       const uploads = await Promise.all(
         req.files.map(file => uploadImage(file.buffer))
       );
-
       const newImages = uploads.map(img => ({
         url: img.secure_url,
         public_id: img.public_id,
         alt: "",
       }));
 
+      // delete old images
       for (const img of existingProduct.images) {
         if (img.public_id) await deleteImage(img.public_id);
       }
@@ -190,11 +188,20 @@ export const updateProduct = async (req, res) => {
       updateData.images = newImages;
     }
 
-    /* Variant vs non-variant update */
-    if (updateData.variants && updateData.variants.length > 0) {
-      updateData.sku = undefined;
-      updateData.mrp = undefined;
+    // Variant validation
+    if (updateData.variants.length > 0) {
+      for (const v of updateData.variants) {
+        if (!v.sku || v.price === undefined || v.stockQuantity === undefined) {
+          return res.status(400).json({
+            success: false,
+            message: "Each variant must have sku, price and stockQuantity",
+          });
+        }
+      }
+      // remove main product price & SKU
       updateData.sellingPrice = undefined;
+      updateData.mrp = undefined;
+      updateData.sku = undefined;
     }
 
     const updated = await Product.findByIdAndUpdate(
@@ -214,7 +221,6 @@ export const updateProduct = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 /* ================= DELETE PRODUCT ================= */
 export const deleteProduct = async (req, res) => {
