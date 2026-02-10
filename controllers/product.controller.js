@@ -12,7 +12,8 @@ const parseJSON = (value, fallback) => {
   }
 };
 
-const generateSlug = (text) => text.toLowerCase().replace(/\s+/g, "-");
+const generateSlug = (text) =>
+  text.toLowerCase().trim().replace(/\s+/g, "-");
 
 /* ================= CREATE PRODUCT ================= */
 export const createProduct = async (req, res) => {
@@ -54,11 +55,13 @@ export const createProduct = async (req, res) => {
     if (!slug) slug = generateSlug(name);
 
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
     const categoryDoc = await Category.findById(category);
-    if (!categoryDoc) return res.status(400).json({ message: "Invalid category" });
+    if (!categoryDoc) {
+      return res.status(400).json({ success: false, message: "Invalid category" });
+    }
 
     /* ===== IMAGE HANDLING ===== */
     let finalImages = [];
@@ -67,13 +70,17 @@ export const createProduct = async (req, res) => {
       finalImages = await Promise.all(
         req.files.map(async (file) => {
           const img = await uploadImage(file.buffer);
-          return { url: img.secure_url, public_id: img.public_id, alt: "" };
+          return {
+            url: img.secure_url,
+            public_id: img.public_id,
+            alt: "",
+          };
         })
       );
     } else if (Array.isArray(images) && images.length > 0) {
       finalImages = images;
     } else {
-      return res.status(400).json({ message: "At least one product image is required" });
+      return res.status(400).json({ success: false, message: "At least one image required" });
     }
 
     /* ===== VARIANT LOGIC ===== */
@@ -83,24 +90,27 @@ export const createProduct = async (req, res) => {
       sku = undefined;
 
       for (const v of variants) {
-        if (!v.sku || !v.price || !v.stockQuantity) {
+        if (!v.sku || !v.price) {
           return res.status(400).json({
-            message: "Each variant must have sku, price and stockQuantity",
+            success: false,
+            message: "Each variant must have sku and price",
           });
         }
       }
     } else {
       if (!sellingPrice || !sku) {
         return res.status(400).json({
-          message: "Non-variant product must have sellingPrice and SKU",
+          success: false,
+          message: "Non-variant product must have sellingPrice and sku",
         });
       }
     }
 
-    if (!/^\d{2}(\d{2})?(\d{2})?$/.test(hsnCode)) {
-      return res.status(400).json({ message: "HSN must be 2, 4, or 6 digits" });
+    if (!/^[0-9]{2,6}$/.test(hsnCode)) {
+      return res.status(400).json({ success: false, message: "Invalid HSN code" });
     }
 
+    /* ===== CREATE PRODUCT ===== */
     const product = await Product.create({
       name,
       slug,
@@ -142,6 +152,7 @@ export const createProduct = async (req, res) => {
   }
 };
 
+
 /* ================= UPDATE PRODUCT ================= */
 export const updateProduct = async (req, res) => {
   try {
@@ -156,18 +167,22 @@ export const updateProduct = async (req, res) => {
     if (updateData.status) updateData.status = updateData.status.toLowerCase();
 
     const existingProduct = await Product.findById(req.params.id);
-    if (!existingProduct) return res.status(404).json({ message: "Product not found" });
+    if (!existingProduct) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
 
     /* IMAGE UPDATE */
     if (Array.isArray(req.files) && req.files.length > 0) {
-      const uploads = await Promise.all(req.files.map(file => uploadImage(file.buffer)));
+      const uploads = await Promise.all(
+        req.files.map(file => uploadImage(file.buffer))
+      );
+
       const newImages = uploads.map(img => ({
         url: img.secure_url,
         public_id: img.public_id,
         alt: "",
       }));
 
-      // delete old images
       for (const img of existingProduct.images) {
         if (img.public_id) await deleteImage(img.public_id);
       }
@@ -188,15 +203,19 @@ export const updateProduct = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Update product error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 /* ================= DELETE PRODUCT ================= */
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
 
     for (const img of product.images) {
       if (img.public_id) await deleteImage(img.public_id);
@@ -210,6 +229,7 @@ export const deleteProduct = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Delete product error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -1,116 +1,79 @@
 import mongoose from "mongoose";
 
-/* ================= SUB-SCHEMAS ================= */
+/* ================= SUB SCHEMAS ================= */
 
-// Supplier info
-const supplierSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true },
-    contact: { type: String, required: true, trim: true },
-    email: { type: String, required: true, trim: true, lowercase: true },
+const supplierSchema = new mongoose.Schema({
+  name: String,
+  contact: String,
+  email: String,
+}, { _id: false });
+
+const shippingSchema = new mongoose.Schema({
+  charges: { type: Number, min: 0 },
+  deliveryTime: String,
+  restrictions: String,
+}, { _id: false });
+
+const variantSchema = new mongoose.Schema({
+  sku: { type: String, required: true, trim: true },
+  price: { type: Number, required: true, min: 0 },
+  stockQuantity: { type: Number, default: 0 },
+  attributes: {
+    color: String,
+    size: String,
+    model: String,
   },
-  { _id: false }
-);
+  isActive: { type: Boolean, default: true },
+}, { _id: false });
 
-// Shipping info
-const shippingSchema = new mongoose.Schema(
-  {
-    charges: { type: Number, required: true, min: 0 },
-    deliveryTime: { type: String, required: true, trim: true },
-    restrictions: { type: String, trim: true },
+/* ================= PRODUCT SCHEMA ================= */
+
+const productSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  slug: { type: String, required: true, unique: true },
+  productKey: { type: String, required: true, unique: true },
+  description: { type: String, required: true },
+
+  category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
+  categoryKey: { type: String, required: true },
+
+  images: [{
+    url: { type: String, required: true },
+    public_id: { type: String, required: true },
+    alt: String
+  }],
+
+  mrp: Number,
+  sellingPrice: Number,
+
+  brand: String,
+
+  // 👇 FIXED SKU
+  sku: {
+    type: String,
+    unique: true,
+    sparse: true
   },
-  { _id: false }
-);
 
-// Variant schema
-const variantSchema = new mongoose.Schema(
-  {
-    sku: { type: String, required: true, trim: true }, // unique per variant can be enforced at app level
-    price: { type: Number, required: true, min: 0 },
-    stock: { type: Number, default: 0, min: 0 },
-    attributes: {
-      color: { type: String, trim: true },
-      resolution: { type: String, trim: true },
-      storage: { type: String, trim: true },
-      size: { type: String, trim: true },
-      model: { type: String, trim: true },
-    },
-    isActive: { type: Boolean, default: true },
-  },
-  { _id: false }
-);
+  stockQuantity: { type: Number, default: 0 },
+  stockStatus: { type: String, enum: ["in-stock", "out-of-stock"], default: "in-stock" },
 
-/* ================= MAIN PRODUCT SCHEMA ================= */
-const productSchema = new mongoose.Schema(
-  {
-    // Basic info
-    name: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, unique: true, lowercase: true },
-    productKey: { type: String, required: true, unique: true, trim: true },
-    description: { type: String, required: true, trim: true },
+  variants: { type: [variantSchema], default: [] },
 
-    // Category
-    category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
-    categoryKey: { type: String, required: true, lowercase: true },
+  warranty: { type: String, required: true },
+  returnPolicy: { type: String, required: true },
+  hsnCode: { type: String, required: true },
 
-    // Images
-    images: [
-      {
-        url: { type: String, required: true },
-        public_id: { type: String, required: true },
-        alt: { type: String, trim: true },
-      },
-    ],
+  barcode: { type: String, unique: true, sparse: true },
 
-    // Pricing (no variant case)
-    mrp: { type: Number, min: 0 },
-    sellingPrice: { type: Number, min: 0 },
+  supplier: { type: [supplierSchema], default: [] },
+  shipping: { type: [shippingSchema], default: [] },
 
-    // Brand / Inventory
-    brand: { type: String, trim: true },
+  isRecommended: { type: Boolean, default: false },
+  status: { type: String, enum: ["active", "inactive"], default: "active" },
 
-    // SKU only required if no variants exist
-    sku: {
-      type: String,
-      trim: true,
-      unique: true,
-      sparse: true, // allows multiple nulls
-      required: function () {
-        return !this.variants || this.variants.length === 0;
-      },
-    },
+  tags: { type: [String], default: [] }
 
-    stockQuantity: { type: Number, default: 0, min: 0 },
-    stockStatus: { type: String, enum: ["in-stock", "out-of-stock"], default: "in-stock" },
-
-    // Variants
-    variants: { type: [variantSchema], default: [] },
-
-    // Technical details
-    specification: { type: String, trim: true },
-    weight: { type: String, trim: true },
-    dimensions: { type: String, trim: true },
-    resolution: { type: String, trim: true },
-    screenSize: { type: Number, min: 0 },
-
-    // Legal
-    warranty: { type: String, required: true, trim: true },
-    returnPolicy: { type: String, required: true, trim: true },
-    hsnCode: { type: String, required: true, trim: true, match: /^[0-9]{2,6}$/ },
-    barcode: { type: String, unique: true, sparse: true, trim: true },
-
-    // Supplier & Shipping
-    supplier: { type: [supplierSchema], default: [] },
-    shipping: { type: [shippingSchema], default: [] },
-
-    // Flags
-    isRecommended: { type: Boolean, default: false },
-    status: { type: String, enum: ["active", "inactive"], default: "active" },
-
-    // SEO
-    tags: { type: [String], default: [] },
-  },
-  { timestamps: true, versionKey: false }
-);
+}, { timestamps: true });
 
 export default mongoose.model("Product", productSchema);
