@@ -18,31 +18,12 @@ const generateSlug = (text) => text.toLowerCase().trim().replace(/\s+/g, "-");
 export const createProduct = async (req, res) => {
   try {
     let {
-      name,
-      slug,
-      productKey,
-      description,
-      category,
-      mrp,
-      sellingPrice,
-      sku,
-      brand,
-      variants,
-      stockStatus,
-      stockQuantity,
-      specification,
-      weight,
-      dimensions,
-      warranty,
-      returnPolicy,
-      hsnCode,
-      barcode,
-      supplier,
-      shipping,
-      tags,
-      images,
-      isRecommended = false,
-      status = "active",
+      name, slug, productKey, description, category,
+      mrp, sellingPrice, sku, brand, variants,
+      stockStatus, stockQuantity, specification, weight, dimensions,
+      warranty, returnPolicy, hsnCode, barcode,
+      supplier, shipping, tags, images,
+      isRecommended = false, status = "active"
     } = req.body;
 
     variants = parseJSON(variants, []);
@@ -53,15 +34,13 @@ export const createProduct = async (req, res) => {
 
     if (!slug) slug = generateSlug(name);
 
-    // Required fields
+    // Required fields check
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy || !hsnCode) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
     const categoryDoc = await Category.findById(category);
-    if (!categoryDoc) {
-      return res.status(400).json({ success: false, message: "Invalid category" });
-    }
+    if (!categoryDoc) return res.status(400).json({ success: false, message: "Invalid category" });
 
     /* ===== IMAGE HANDLING ===== */
     let finalImages = [];
@@ -75,12 +54,13 @@ export const createProduct = async (req, res) => {
     } else if (Array.isArray(images) && images.length > 0) {
       finalImages = images;
     } else {
-      return res.status(400).json({ success: false, message: "At least one image required" });
+      return res.status(400).json({ success: false, message: "At least one image is required" });
     }
 
     /* ===== VARIANT LOGIC ===== */
     if (variants.length > 0) {
-      sku = undefined; // root SKU not required
+      // Root SKU not needed for variant products
+      sku = undefined;
       sellingPrice = undefined;
       mrp = undefined;
 
@@ -93,6 +73,7 @@ export const createProduct = async (req, res) => {
         }
       }
     } else {
+      // Non-variant products must have SKU and sellingPrice
       if (!sku || !sellingPrice) {
         return res.status(400).json({
           success: false,
@@ -101,6 +82,7 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    // HSN validation
     if (!/^[0-9]{2,6}$/.test(hsnCode)) {
       return res.status(400).json({ success: false, message: "Invalid HSN code" });
     }
@@ -139,6 +121,10 @@ export const createProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Create product error:", error);
+    // Duplicate key error handling
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -157,9 +143,7 @@ export const updateProduct = async (req, res) => {
     if (updateData.status) updateData.status = updateData.status.toLowerCase();
 
     const existingProduct = await Product.findById(req.params.id);
-    if (!existingProduct) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
+    if (!existingProduct) return res.status(404).json({ success: false, message: "Product not found" });
 
     /* ===== IMAGE UPDATE ===== */
     if (Array.isArray(req.files) && req.files.length > 0) {
@@ -180,6 +164,9 @@ export const updateProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Update product error:", error);
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: `Duplicate value: ${JSON.stringify(error.keyValue)}` });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
