@@ -13,7 +13,7 @@ const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
 export const signup = async (req, res) => {
   try {
     const { fullName, email, mobile, password } = req.body;
-
+    console.log(req.body)
     if (!fullName || !mobile || !password) {
       return res.status(400).json({ message: "Full name, mobile and password are required" });
     }
