@@ -1,0 +1,36 @@
+{
+  "name": "mitronix-ecommerce-dashboard",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "google-auth-library": "^10.5.0",
+    "jsonwebtoken": "^9.0.3",
+    "libphonenumber-js": "^1.12.10",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.21.0",
+    "multer": "^2.0.2",
+    "nodeman": "^1.1.2",
+    "nodemon": "^3.1.11",
+    "otp-generator": "^4.0.1",
+    "pdfkit": "^0.17.2",
+    "puppeteer": "^24.37.2",
+    "slugify": "^1.6.6",
+    "streamifier": "^0.1.1",
+    "twilio": "^5.8.0"
+  }
+}
