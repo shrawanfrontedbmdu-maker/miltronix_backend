@@ -21,26 +21,38 @@ export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Find product by ID and populate category details
-    const product = await Product.findById(id).populate("category", "name categoryKey");
+    const product = await Product.findById(id)
+      .populate("category", "pageTitle categoryKey image");
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
     }
 
-    res.json({ success: true, product });
+    res.json({
+      success: true,
+      product
+    });
 
   } catch (error) {
     console.error("Get product by ID error:", error);
 
-    // Handle invalid ObjectId
-    if (error.kind === "ObjectId") {
-      return res.status(400).json({ success: false, message: "Invalid product ID" });
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID"
+      });
     }
 
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
+
 
 /* ================= GET ALL PRODUCTS ================= */
 export const getProducts = async (req, res) => {
