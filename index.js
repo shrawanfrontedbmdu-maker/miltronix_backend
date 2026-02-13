@@ -20,6 +20,8 @@ import roleRoutes from './routes/roles.routes.js';
 import cartRoutes from './routes/cart.routes.js';
 import healthRoutes from './routes/apihealth.route.js';
 import wishlistRoutes from "./routes/wishlist.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import storeRoutes from "./routes/store.auth.routes.js";
 // import brandRouter from "./routes/brand.routes.js";
 import infosectionRoutes from "./routes/infosection.routes.js";
 // import recommendationsRoutes from "./routes/recommendations.route.js";
@@ -68,6 +70,8 @@ app.use("/api/cart", cartRoutes);
 app.use("/api", healthRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/infosections", infosectionRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/stores", storeRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
 
 // ------------------- GLOBAL ERROR HANDLER -------------------

@@ -16,6 +16,11 @@ router.post("/", upload.array("images", 6), createProduct);
 
 /* ================= UPDATE PRODUCT ================= */
 // Safe update with multer to handle new images
+// Upload up to 6 images per product
+router.post("/", upload.array("images", 6), createProduct);
+
+/* ================= UPDATE PRODUCT ================= */
+// Upload new images if needed; replaces old images
 router.put("/:id", upload.array("images", 6), updateProduct);
 
 /* ================= GET ALL PRODUCTS ================= */
