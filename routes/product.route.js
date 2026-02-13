@@ -11,11 +11,11 @@ import upload from "../middlewares/multer.js";
 const router = express.Router();
 
 /* ================= CREATE PRODUCT ================= */
-// Upload up to 6 images per product
+// Safe create with multer to handle up to 6 images
 router.post("/", upload.array("images", 6), createProduct);
 
 /* ================= UPDATE PRODUCT ================= */
-
+// Safe update with multer to handle new images
 router.put("/:id", upload.array("images", 6), updateProduct);
 
 /* ================= GET ALL PRODUCTS ================= */
