@@ -77,6 +77,7 @@ export const storeLogin = async (req, res) => {
       storeId: store?._id,
     };
     const token = generateToken(payload);
+    console.log(token)
 
     res.json({ message: "Logged in", token, user, store });
   } catch (err) {

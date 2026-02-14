@@ -7,4 +7,6 @@ const router = express.Router();
 // Store owner login
 router.post("/login", storeLogin);
 
+// router.get('/me', storeProfile);
+
 export default router;

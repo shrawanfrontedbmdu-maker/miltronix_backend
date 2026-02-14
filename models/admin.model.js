@@ -2,35 +2,12 @@ import mongoose from "mongoose";
 
 const adminSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // link to store owner account
+
     name: {
       type: String,
       required: true,
       trim: true,
-    },
-
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-      match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-        "Please enter a valid email address",
-      ],
-    },
-
-    password: {
-      type: String,
-      required: true,
-      minlength: [8, "Password must be at least 8 characters long"],
-      select: false,
-    },
-
-    role: {
-      type: String,
-      enum: ["superadmin", "admin"],
-      default: "admin",
     },
 
     isActive: {
@@ -45,7 +22,7 @@ const adminSchema = new mongoose.Schema(
   {
     timestamps: true,
     strict: true, // ✅ prevents extra fields from being saved
-  }
+  },
 );
 
 export default mongoose.model("Admin", adminSchema);

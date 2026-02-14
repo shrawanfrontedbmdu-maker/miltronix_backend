@@ -27,17 +27,10 @@ export const createProduct = async (req, res) => {
       images,
       specifications,
       keyFeatures,
-      mrp,
-      sellingPrice,
-      costPrice,
-      sku,
       brand,
-      modelNumber,
       variants,
-      stockQuantity,
       warranty,
       returnPolicy,
-      dimensions,
       tags,
       isRecommended,
       isFeatured,
@@ -48,25 +41,25 @@ export const createProduct = async (req, res) => {
       keywords,
     } = req.body;
 
-    // Parse JSON fields
+    /* ================= PARSE JSON FIELDS ================= */
     specifications = parseJSON(specifications, []);
     keyFeatures = parseJSON(keyFeatures, []);
     variants = parseJSON(variants, []);
-    dimensions = parseJSON(dimensions, {});
     tags = parseJSON(tags, []);
     keywords = parseJSON(keywords, []);
     images = parseJSON(images, []);
 
-    // Trim
+    /* ================= TRIM FIELDS ================= */
     name = name?.trim();
     productKey = productKey?.trim();
     description = description?.trim();
     warranty = warranty?.trim();
     returnPolicy = returnPolicy?.trim();
+    brand = brand?.trim();
 
     if (!slug && name) slug = generateSlug(name);
 
-    // Required fields
+    /* ================= REQUIRED FIELDS ================= */
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy) {
       return res.status(400).json({
         success: false,
@@ -74,52 +67,62 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Category check
+    /* ================= CATEGORY CHECK ================= */
     const categoryDoc = await Category.findById(category);
     if (!categoryDoc) {
-      return res.status(400).json({ success: false, message: "Invalid category" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category",
+      });
     }
 
-    /* ===== IMAGE HANDLING ===== */
+    /* ================= IMAGE HANDLING ================= */
     let finalImages = [];
 
     if (req.files && req.files.length > 0) {
       finalImages = await Promise.all(
         req.files.map(async (file) => {
           const img = await uploadImage(file.buffer);
-          return { url: img.secure_url, public_id: img.public_id, alt: "" };
+          return {
+            url: img.secure_url,
+            public_id: img.public_id,
+            alt: name,
+          };
         })
       );
     } else if (images.length > 0) {
       finalImages = images;
     } else {
-      return res.status(400).json({ success: false, message: "At least one image required" });
+      return res.status(400).json({
+        success: false,
+        message: "At least one product image is required",
+      });
     }
 
-    /* ===== VARIANT RULE ===== */
-    if (variants.length > 0) {
-      sku = undefined;
-      sellingPrice = undefined;
-      mrp = undefined;
+    /* ================= VARIANT VALIDATION ================= */
+    if (!Array.isArray(variants) || variants.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one variant is required",
+      });
+    }
 
-      for (const v of variants) {
-        if (!v.sku || v.price == null || v.stockQuantity == null) {
-          return res.status(400).json({
-            success: false,
-            message: "Each variant must have sku, price, stockQuantity",
-          });
-        }
-      }
-    } else {
-      if (!sku || sellingPrice == null) {
+    for (const v of variants) {
+      if (!v.sku || v.price == null) {
         return res.status(400).json({
           success: false,
-          message: "Non-variant product must have sku and sellingPrice",
+          message: "Each variant must have sku and price",
         });
       }
+
+      // Admin should NOT set stock initially
+      v.stockQuantity = 0;
+      v.hasStock = false;
+
+      if (!v.currency) v.currency = "INR";
     }
 
-    /* ===== CREATE PRODUCT ===== */
+    /* ================= CREATE PRODUCT ================= */
     const product = await Product.create({
       name,
       slug,
@@ -129,17 +132,12 @@ export const createProduct = async (req, res) => {
       images: finalImages,
       specifications,
       keyFeatures,
-      mrp,
-      sellingPrice,
-      costPrice,
       brand,
       modelNumber,
       sku,
       variants,
-      stockQuantity,
       warranty,
       returnPolicy,
-      dimensions,
       tags,
       keywords,
       isRecommended,
@@ -148,9 +146,10 @@ export const createProduct = async (req, res) => {
       status,
       metaTitle,
       metaDescription,
+      createdBy: req.admin?._id,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Product created successfully",
       product,
@@ -158,15 +157,27 @@ export const createProduct = async (req, res) => {
 
   } catch (error) {
     console.error("Create product error:", error);
+
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
         message: `Duplicate value: ${JSON.stringify(error.keyValue)}`,
       });
     }
-    res.status(500).json({ success: false, message: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
+
+/* ================= GET ALL PRODUCTS ================= */
+export const getProducts = async (req, res) => {
+  try {
+    const products = await Product.find()
+      .populate("category", "name categoryKey")
+      .sort({ createdAt: -1 });
 
 /* ================= GET ALL PRODUCTS ================= */
 export const getProducts = async (req, res) => {
@@ -199,31 +210,64 @@ export const getProductById = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-/* ================= UPDATE PRODUCT ================= */
+// update product
 export const updateProduct = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    updateData.specifications = parseJSON(updateData.specifications, []);
-    updateData.keyFeatures = parseJSON(updateData.keyFeatures, []);
-    updateData.variants = parseJSON(updateData.variants, []);
-    updateData.dimensions = parseJSON(updateData.dimensions, {});
-    updateData.tags = parseJSON(updateData.tags, []);
-    updateData.keywords = parseJSON(updateData.keywords, []);
+    const parseJSON = (value) => {
+      try {
+        return typeof value === "string" ? JSON.parse(value) : value;
+      } catch {
+        return undefined;
+      }
+    };
 
+    /* ================= FIND PRODUCT ================= */
     const product = await Product.findById(req.params.id);
-    if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
-
-    /* ===== VARIANT RULE ===== */
-    if (updateData.variants.length > 0) {
-      updateData.sku = undefined;
-      updateData.sellingPrice = undefined;
-      updateData.mrp = undefined;
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
     }
 
-    /* ===== IMAGE UPDATE ===== */
+    /* ================= SAFE FIELD UPDATES ================= */
+
+    if (updateData.specifications)
+      updateData.specifications = parseJSON(updateData.specifications);
+
+    if (updateData.keyFeatures)
+      updateData.keyFeatures = parseJSON(updateData.keyFeatures);
+
+    if (updateData.tags)
+      updateData.tags = parseJSON(updateData.tags);
+
+    if (updateData.keywords)
+      updateData.keywords = parseJSON(updateData.keywords);
+
+    /* ================= SAFE VARIANT UPDATE ================= */
+    if (updateData.variants) {
+      const newVariants = parseJSON(updateData.variants);
+
+      updateData.variants = newVariants.map((newVariant) => {
+        const existingVariant = product.variants.find(
+          (v) => v.sku === newVariant.sku
+        );
+
+        return {
+          ...newVariant,
+          stockQuantity: existingVariant?.stockQuantity ?? 0,
+          stockStatus: existingVariant?.stockStatus ?? "out-of-stock",
+          hasStock: existingVariant?.hasStock ?? false,
+        };
+      });
+    } else {
+      // VERY IMPORTANT → don't touch variants if not provided
+      delete updateData.variants;
+    }
+
+    /* ================= IMAGE UPDATE ================= */
     if (req.files && req.files.length > 0) {
       for (const img of product.images) {
         if (img.public_id) await deleteImage(img.public_id);
@@ -240,29 +284,37 @@ export const updateProduct = async (req, res) => {
       }));
     }
 
-    const updated = await Product.findByIdAndUpdate(
+    /* ================= UPDATE ONLY PROVIDED FIELDS ================= */
+    const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
-      updateData,
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Product updated successfully",
-      product: updated,
+      product: updatedProduct,
     });
 
   } catch (error) {
     console.error("Update product error:", error);
+
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: `Duplicate value: ${JSON.stringify(error.keyValue)}`,
+        message: `Duplicate value error: ${JSON.stringify(error.keyValue)}`,
       });
     }
-    res.status(500).json({ success: false, message: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
+
+
 
 /* ================= DELETE PRODUCT ================= */
 export const deleteProduct = async (req, res) => {
