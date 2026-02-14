@@ -25,6 +25,7 @@ import storeRoutes from "./routes/store.auth.routes.js";
 // import brandRouter from "./routes/brand.routes.js";
 import infosectionRoutes from "./routes/infosection.routes.js";
 // import recommendationsRoutes from "./routes/recommendations.route.js";
+import addressRoutes from "./routes/address.routes.js";
 
 const app = express();
 
@@ -73,6 +74,7 @@ app.use("/api/infosections", infosectionRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/stores", storeRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
+app.use("/api/addresses", addressRoutes);
 
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {

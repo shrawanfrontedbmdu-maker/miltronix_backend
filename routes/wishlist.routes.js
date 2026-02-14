@@ -1,19 +1,28 @@
 import express from "express";
 import {
-  addWishlistItem,
   getWishlistByUser,
+  addWishlistItem,
   removeWishlistItem,
-  clearWishlist
+  clearWishlist,
+  // mergeGuestWishlist // optional, implement if needed
 } from "../controllers/wishlist.controller.js";
 
 const router = express.Router();
 
-router.post("/add", addWishlistItem);
-router.get("/:userId", getWishlistByUser);
+/* ================= GET WISHLIST BY USER ================= *
+router.get("/user/:userId", getWishlistByUser);
 
-// ⚠️ clear route must come BEFORE :userId/:itemId
+/* ================= ADD ITEM TO WISHLIST ================= */
+// Body: { userId, productId, variant, title, images, category, priceSnapshot }
+router.post("/items", addWishlistItem);
+
+/* ================= REMOVE SINGLE ITEM =================*/
+router.delete("/items/:userId/:itemId", removeWishlistItem);
+
+/* ================= CLEAR WISHLIST ================*/
 router.delete("/clear/:userId", clearWishlist);
 
-router.delete("/:userId/:itemId", removeWishlistItem);
+/* ================= OPTIONAL: MERGE GUEST WISHLIST ================= */
+// router.post("/merge", mergeGuestWishlist);
 
 export default router;
