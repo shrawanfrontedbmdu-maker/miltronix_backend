@@ -209,15 +209,56 @@ export const updateInventory = async (req, res) => {
 export const getStoreInventory = async (req, res) => {
   try {
     const storeId = req.store?._id || req.params.storeId;
-    // verify ownership already enforced by verifyStore middleware when needed
-    const list = await StoreInventory.find({ store: storeId }).populate(
-      "product",
-    );
-    res.json({ inventory: list });
+
+    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid store ID",
+      });
+    }
+
+    // pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // optional stock filter
+    const filter = { store: storeId };
+    console.log(filter)
+    if (req.query.stockStatus) {
+      filter.stockStatus = req.query.stockStatus; // in-stock | low-stock | out-of-stock
+    }
+
+    const total = await StoreInventory.countDocuments(filter);
+
+    const inventory = await StoreInventory.find(filter)
+      .populate({
+        path: "product",
+        select: "name slug brand images",
+      })
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+      console.log(inventory)
+
+    res.status(200).json({
+      success: true,
+      page,
+      totalPages: Math.ceil(total / limit),
+      totalItems: total,
+      inventory,
+    });
+
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Get Store Inventory Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch inventory",
+    });
   }
 };
+
 
 export const getStoreProductList = async (req, res) => {
   try {

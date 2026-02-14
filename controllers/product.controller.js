@@ -203,25 +203,17 @@ export const getProductById = async (req, res) => {
   }
 };
 
-/* ================= UPDATE PRODUCT ================= */
 export const updateProduct = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    /* ================= SAFE JSON PARSING ================= */
-    const parseJSON = (value, fallback) => {
+    const parseJSON = (value) => {
       try {
-        return typeof value === "string" ? JSON.parse(value) : value ?? fallback;
+        return typeof value === "string" ? JSON.parse(value) : value;
       } catch {
-        return fallback;
+        return undefined;
       }
     };
-
-    updateData.specifications = parseJSON(updateData.specifications, []);
-    updateData.keyFeatures = parseJSON(updateData.keyFeatures, []);
-    updateData.variants = parseJSON(updateData.variants, []);
-    updateData.tags = parseJSON(updateData.tags, []);
-    updateData.keywords = parseJSON(updateData.keywords, []);
 
     /* ================= FIND PRODUCT ================= */
     const product = await Product.findById(req.params.id);
@@ -232,11 +224,25 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    /* =====================================================
-       PROTECT STOCK FIELDS (Stock managed by StoreInventory)
-    ===================================================== */
-    if (updateData.variants?.length > 0) {
-      updateData.variants = updateData.variants.map((newVariant) => {
+    /* ================= SAFE FIELD UPDATES ================= */
+
+    if (updateData.specifications)
+      updateData.specifications = parseJSON(updateData.specifications);
+
+    if (updateData.keyFeatures)
+      updateData.keyFeatures = parseJSON(updateData.keyFeatures);
+
+    if (updateData.tags)
+      updateData.tags = parseJSON(updateData.tags);
+
+    if (updateData.keywords)
+      updateData.keywords = parseJSON(updateData.keywords);
+
+    /* ================= SAFE VARIANT UPDATE ================= */
+    if (updateData.variants) {
+      const newVariants = parseJSON(updateData.variants);
+
+      updateData.variants = newVariants.map((newVariant) => {
         const existingVariant = product.variants.find(
           (v) => v.sku === newVariant.sku
         );
@@ -248,10 +254,12 @@ export const updateProduct = async (req, res) => {
           hasStock: existingVariant?.hasStock ?? false,
         };
       });
+    } else {
+      // VERY IMPORTANT → don't touch variants if not provided
+      delete updateData.variants;
     }
-    /* =====================================================
-       IMAGE UPDATE (Replace All)
-    ===================================================== */
+
+    /* ================= IMAGE UPDATE ================= */
     if (req.files && req.files.length > 0) {
       for (const img of product.images) {
         if (img.public_id) await deleteImage(img.public_id);
@@ -268,16 +276,11 @@ export const updateProduct = async (req, res) => {
       }));
     }
 
-    /* =====================================================
-       UPDATE PRODUCT
-    ===================================================== */
+    /* ================= UPDATE ONLY PROVIDED FIELDS ================= */
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
-      updateData,
-      {
-        new: true,
-        runValidators: true,
-      }
+      { $set: updateData },
+      { new: true, runValidators: true }
     );
 
     return res.json({
@@ -302,6 +305,7 @@ export const updateProduct = async (req, res) => {
     });
   }
 };
+
 
 
 /* ================= DELETE PRODUCT ================= */
