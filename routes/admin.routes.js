@@ -9,6 +9,8 @@ router.post('/signup',adminRegister);
 
 router.post('/login',adminLogin);
 
+// router.get('/me', verifyAdmin, getProfile);
+
 router.post('/stores', verifyAdmin, adminCreateStore);
 
 router.get('/stores', verifyAdmin, getStores);
