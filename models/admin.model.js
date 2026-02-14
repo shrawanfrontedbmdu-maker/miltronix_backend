@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 
 const adminSchema = new mongoose.Schema(
   {
@@ -15,11 +14,16 @@ const adminSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      match: [
+        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+        "Please enter a valid email address",
+      ],
     },
 
     password: {
       type: String,
       required: true,
+      minlength: [8, "Password must be at least 8 characters long"],
       select: false,
     },
 
@@ -38,14 +42,10 @@ const adminSchema = new mongoose.Schema(
       type: Date,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    strict: true, // ✅ prevents extra fields from being saved
+  }
 );
-
-adminSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
 
 export default mongoose.model("Admin", adminSchema);
