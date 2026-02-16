@@ -22,9 +22,11 @@ import healthRoutes from './routes/apihealth.route.js';
 import wishlistRoutes from "./routes/wishlist.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import storeRoutes from "./routes/store.auth.routes.js";
+import storeInventoryRoutes from "./routes/store.inventory.routes.js";
 // import brandRouter from "./routes/brand.routes.js";
 import infosectionRoutes from "./routes/infosection.routes.js";
 // import recommendationsRoutes from "./routes/recommendations.route.js";
+import addressRoutes from "./routes/address.routes.js";
 
 const app = express();
 
@@ -72,7 +74,9 @@ app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/infosections", infosectionRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/stores", storeRoutes);
+app.use("/api/store-inventory", storeInventoryRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
+app.use("/api/addresses", addressRoutes);
 
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {

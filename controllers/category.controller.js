@@ -1,13 +1,11 @@
 import Category from "../models/category.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
-// helper
-const getFileByField = (files, field) => {
-  return files?.find((f) => f.fieldname === field);
-};
-
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
+  console.log("FILES:", req.files);
+  console.log("BODY:", req.body);
+
   try {
     const {
       categoryKey,
@@ -36,9 +34,10 @@ export const createCategory = async (req, res) => {
 
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
-    const mainImage = getFileByField(req.files, "image");
+    const mainImage = req.files?.image?.[0];
 
     if (mainImage) {
+      console.log("IMAGE RECEIVED:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
@@ -102,8 +101,9 @@ export const updateCategory = async (req, res) => {
     }
 
     // ===== MAIN IMAGE =====
-    const mainImage = getFileByField(req.files, "image");
+    const mainImage = req.files?.image?.[0];
     if (mainImage) {
+      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }

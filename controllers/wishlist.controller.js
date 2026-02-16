@@ -1,37 +1,46 @@
 import Wishlist from "../models/wishlist.model.js";
 
-
-// ➕ Add item to wishlist
+/* ================= ADD ITEM TO WISHLIST ================= */
 export const addWishlistItem = async (req, res) => {
   try {
-    const { userId, item } = req.body;
+    const { userId, productId, variant, title, images, category, priceSnapshot } = req.body;
 
-    if (!userId || !item) {
+    if (!userId || !productId || !priceSnapshot) {
       return res.status(400).json({
         success: false,
-        message: "userId and item are required"
+        message: "userId, productId, and priceSnapshot are required"
       });
     }
 
+    // Build wishlist item object
+    const item = {
+      product: productId,
+      title,
+      images,
+      category,
+      variant,
+      priceSnapshot
+    };
+
+    // Find user's wishlist
     let wishlist = await Wishlist.findOne({ user: userId });
 
     if (!wishlist) {
+      // Create new wishlist if doesn't exist
       wishlist = new Wishlist({
         user: userId,
-        items: [item],
+        items: [item]
       });
     } else {
+      // Check if product already exists in wishlist
       const exists = wishlist.items.find(
-        (i) =>
-          i.product &&
-          item.product &&
-          i.product.toString() === item.product.toString()
+        (i) => i.product.toString() === productId.toString()
       );
 
       if (exists) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          message: "Item already exists in wishlist" 
+          message: "Item already exists in wishlist"
         });
       }
 
@@ -40,22 +49,20 @@ export const addWishlistItem = async (req, res) => {
 
     await wishlist.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Item added to wishlist",
       wishlist
     });
-
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 };
 
-
-// 📥 Get wishlist by user
+/* ================= GET WISHLIST BY USER ================= */
 export const getWishlistByUser = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -64,27 +71,25 @@ export const getWishlistByUser = async (req, res) => {
       .populate("items.product");
 
     if (!wishlist) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Wishlist not found" 
+        message: "Wishlist not found"
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       wishlist
     });
-
   } catch (error) {
-    res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      error: error.message 
+      error: error.message
     });
   }
 };
 
-
-// ❌ Remove single item
+/* ================= REMOVE SINGLE ITEM ================= */
 export const removeWishlistItem = async (req, res) => {
   try {
     const { userId, itemId } = req.params;
@@ -92,34 +97,40 @@ export const removeWishlistItem = async (req, res) => {
     const wishlist = await Wishlist.findOne({ user: userId });
 
     if (!wishlist) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Wishlist not found" 
+        message: "Wishlist not found"
       });
     }
 
+    const originalLength = wishlist.items.length;
     wishlist.items = wishlist.items.filter(
       (item) => item._id.toString() !== itemId
     );
 
+    if (wishlist.items.length === originalLength) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found in wishlist"
+      });
+    }
+
     await wishlist.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Item removed",
+      message: "Item removed from wishlist",
       wishlist
     });
-
   } catch (error) {
-    res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      error: error.message 
+      error: error.message
     });
   }
 };
 
-
-// 🧹 Clear wishlist
+/* ================= CLEAR WISHLIST ================= */
 export const clearWishlist = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -136,15 +147,14 @@ export const clearWishlist = async (req, res) => {
     wishlist.items = [];
     await wishlist.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Wishlist cleared successfully"
     });
-
   } catch (error) {
-    res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      error: error.message 
+      error: error.message
     });
   }
 };

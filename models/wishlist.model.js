@@ -1,46 +1,55 @@
 import mongoose from "mongoose";
 
-const WishlistItemSchema = new mongoose.Schema({
-  product: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "Product", 
-    required: false 
-  },
-
-  title: String,
-
-  images: [
-    {
-      url: String,
-      public_id: String,
+/* ================= WISHLIST ITEM SCHEMA ================= */
+const WishlistItemSchema = new mongoose.Schema(
+  {
+    product: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Product", 
+      required: true // always reference a product
     },
-  ],
 
-  category: String,
+    title: { type: String, trim: true }, 
 
-  variant: {
-    sku: String,
-    color: String,
-    size: String,
+    images: [
+      {
+        url: { type: String, required: true },
+        public_id: { type: String, required: true },
+        alt: { type: String, trim: true },
+      },
+    ],
+
+    category: { type: String, trim: true }, 
+
+    variant: {
+      sku: { type: String, trim: true },
+      color: { type: String, trim: true },
+      size: { type: String, trim: true },
+    },
+
+    priceSnapshot: { type: Number, required: true }, 
+
+    addedAt: { type: Date, default: Date.now },
   },
+  { _id: true }
+);
 
-  priceSnapshot: Number,
+/* ================= WISHLIST SCHEMA ================= */
+const WishlistSchema = new mongoose.Schema(
+  {
+    user: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "User", 
+      required: true,
+      index: true // makes it fast to query by user
+    },
 
-  addedAt: { type: Date, default: Date.now },
-}, { _id: true });
-
-
-const WishlistSchema = new mongoose.Schema({
-  user: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "User", 
-    required: true,
-    index: true 
+    items: [WishlistItemSchema], // array of products
   },
+  { timestamps: true }
+);
 
-  items: [WishlistItemSchema],
-
-}, { timestamps: true });
-
+/* ================= MODEL ================= */
 const Wishlist = mongoose.model("Wishlist", WishlistSchema);
+
 export default Wishlist;

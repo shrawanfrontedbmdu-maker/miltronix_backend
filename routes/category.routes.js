@@ -11,29 +11,27 @@ import { upload } from "../middlewares/uploadcategory.js";
 
 const router = express.Router();
 
-// ================= CREATE CATEGORY =================
-// - category image only
+// ===== CREATE CATEGORY =====
 router.post(
   "/",
-  upload.single("image"),
+  upload.fields([{ name: "image", maxCount: 1 }]), 
   createCategory
 );
 
-// ================= GET ALL =================
+// ===== GET ALL =====
 router.get("/", getCategories);
 
-// ================= GET BY ID =================
+// ===== GET BY ID =====
 router.get("/:id", getCategoryById);
 
-// ================= UPDATE CATEGORY =================
-// supports image replace
+// ===== UPDATE CATEGORY =====
 router.put(
   "/:id",
-  upload.single("image"),
+  upload.fields([{ name: "image", maxCount: 1 }]), 
   updateCategory
 );
 
-// ================= DELETE =================
+// ===== DELETE CATEGORY =====
 router.delete("/:id", deleteCategory);
 
 export default router;

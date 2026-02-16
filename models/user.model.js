@@ -10,10 +10,14 @@ const userSchema = new mongoose.Schema(
 
     email: {
       type: String,
+      required: true,
       unique: true,
-      sparse: true,
       lowercase: true,
       trim: true,
+      match: [
+        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+        "Please enter a valid email address",
+      ],
     },
 
     mobile: {
@@ -25,6 +29,15 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
+      required: true,
+      minlength: [8, "Password must be at least 8 characters long"],
+      select: false,
+    },
+
+    role: {
+      type: String,
+      enum: ["user", "storeManager", "admin"],
+      default: "user",
     },
 
     role:{
@@ -50,7 +63,7 @@ const userSchema = new mongoose.Schema(
       sparse: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("User", userSchema);
