@@ -40,6 +40,12 @@ const userSchema = new mongoose.Schema(
       default: "user",
     },
 
+    role:{
+      type: String,
+      enum: ["user", "storeManager", "admin"],
+      default: "user",
+    },
+
     otp: String,
     otpExpiry: Date,
 
