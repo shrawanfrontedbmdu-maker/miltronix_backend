@@ -348,7 +348,7 @@ export const getRecommendedProducts = async (req, res) => {
   try {
     const { category } = req.query;
     const filter = category ? { category, status: "active" } : { status: "active" };
-    const products = await Product.find({ isRecommended: true, ...filter })
+    const products = await Product.find({isRecommended: true, ...filter })
       .populate("category")
       .sort({ createdAt: -1 }); 
 
