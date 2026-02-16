@@ -39,8 +39,6 @@ export const createProduct = async (req, res) => {
       metaTitle,
       metaDescription,
       keywords,
-      modelNumber,
-      sku,
     } = req.body;
 
     /* ================= PARSE JSON FIELDS ================= */
@@ -117,6 +115,7 @@ export const createProduct = async (req, res) => {
         });
       }
 
+      // Admin should NOT set stock initially
       v.stockQuantity = 0;
       v.hasStock = false;
 
@@ -134,8 +133,6 @@ export const createProduct = async (req, res) => {
       specifications,
       keyFeatures,
       brand,
-      modelNumber,
-      sku,
       variants,
       warranty,
       returnPolicy,
@@ -173,6 +170,7 @@ export const createProduct = async (req, res) => {
   }
 };
 
+
 /* ================= GET ALL PRODUCTS ================= */
 export const getProducts = async (req, res) => {
   try {
@@ -180,11 +178,7 @@ export const getProducts = async (req, res) => {
       .populate("category", "name categoryKey")
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      count: products.length,
-      products,
-    });
+    res.json({ success: true, count: products.length, products });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -208,8 +202,7 @@ export const getProductById = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-/* ================= UPDATE PRODUCT ================= */
+// update product
 export const updateProduct = async (req, res) => {
   try {
     let updateData = { ...req.body };
@@ -222,6 +215,7 @@ export const updateProduct = async (req, res) => {
       }
     };
 
+    /* ================= FIND PRODUCT ================= */
     const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({
@@ -229,6 +223,8 @@ export const updateProduct = async (req, res) => {
         message: "Product not found",
       });
     }
+
+    /* ================= SAFE FIELD UPDATES ================= */
 
     if (updateData.specifications)
       updateData.specifications = parseJSON(updateData.specifications);
@@ -242,6 +238,7 @@ export const updateProduct = async (req, res) => {
     if (updateData.keywords)
       updateData.keywords = parseJSON(updateData.keywords);
 
+    /* ================= SAFE VARIANT UPDATE ================= */
     if (updateData.variants) {
       const newVariants = parseJSON(updateData.variants);
 
@@ -258,9 +255,11 @@ export const updateProduct = async (req, res) => {
         };
       });
     } else {
+      // VERY IMPORTANT → don't touch variants if not provided
       delete updateData.variants;
     }
 
+    /* ================= IMAGE UPDATE ================= */
     if (req.files && req.files.length > 0) {
       for (const img of product.images) {
         if (img.public_id) await deleteImage(img.public_id);
@@ -277,6 +276,7 @@ export const updateProduct = async (req, res) => {
       }));
     }
 
+    /* ================= UPDATE ONLY PROVIDED FIELDS ================= */
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       { $set: updateData },
@@ -328,3 +328,17 @@ export const deleteProduct = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const getFeaturedProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ isFeatured: true })
+      .populate("category")
+      .sort({ createdAt: -1 }); 
+
+    console.log(products)
+    res.json({ success: true, count: products.length, products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
