@@ -69,6 +69,17 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
+    subcategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subcategory",
+      default: null,
+    },
+
+    filterOptions: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FilterOption",
+    }],
+
     images: [
       {
         url: { type: String, required: true },
