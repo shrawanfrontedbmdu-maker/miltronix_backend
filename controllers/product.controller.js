@@ -174,18 +174,42 @@ export const createProduct = async (req, res) => {
 };
 
 /* ================= GET ALL PRODUCTS ================= */
+
 export const getProducts = async (req, res) => {
   try {
-    const products = await Product.find()
-      .populate("category", "name categoryKey")
+    const { categoryKey, category, search } = req.query;
+
+    let filter = {};
+
+    // filter by categoryId
+    if (category) {
+      filter.category = category;
+    }
+
+    // filter by categoryKey (slug)
+    if (categoryKey) {
+      const cat = await Category.findOne({ slug: categoryKey });
+      if (!cat) {
+        return res.json({ success: true, products: [] });
+      }
+      filter.category = cat._id;
+    }
+
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
+    }
+
+    const products = await Product.find(filter)
+      .populate("category", "name slug categoryKey")
       .sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      count: products.length,
       products,
     });
+
   } catch (error) {
+    console.error("getProducts error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
