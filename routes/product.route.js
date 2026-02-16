@@ -6,6 +6,7 @@ import {
   updateProduct,
   deleteProduct,
   getFeaturedProducts,
+  getRecommendedProducts,
 } from "../controllers/product.controller.js";
 import upload from "../middlewares/multer.js";
 
@@ -23,6 +24,8 @@ router.get("/", getProducts);
 
 /* ================= GET FEATURED PRODUCTS ================= */
 router.get("/featured", getFeaturedProducts);
+
+router.get("/recommended", getRecommendedProducts);
 
 /* ================= GET PRODUCT BY ID ================= */
 router.get("/:id", getProductById);

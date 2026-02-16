@@ -331,7 +331,24 @@ export const deleteProduct = async (req, res) => {
 
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const products = await Product.find({ isFeatured: true })
+    const { category } = req.query;
+    const filter = category ? { category, status: "active" } : { status: "active" };
+    const products = await Product.find({ isFeatured: true, ...filter })
+      .populate("category")
+      .sort({ createdAt: -1 }); 
+
+    console.log(products)
+    res.json({ success: true, count: products.length, products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getRecommendedProducts = async (req, res) => {
+  try {
+    const { category } = req.query;
+    const filter = category ? { category, status: "active" } : { status: "active" };
+    const products = await Product.find({ isRecommended: true, ...filter })
       .populate("category")
       .sort({ createdAt: -1 }); 
 
