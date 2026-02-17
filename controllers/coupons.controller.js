@@ -349,3 +349,146 @@ export const getOrdersByCoupons = async (req, res) => {
   }
 };
 
+
+// ✅ Apply Coupon
+export const applyCoupon = async (req, res) => {
+  try {
+    const { code, orderAmount } = req.body;
+
+    const coupon = await Coupon.findOne({ code, status: "ACTIVE" });
+    if (!coupon) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Invalid or expired coupon" });
+    }
+
+    const now = new Date();
+    if (now < coupon.startDate || now > coupon.expiryDate) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Coupon not valid" });
+    }
+
+    if (orderAmount < coupon.minOrderValue) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum order value should be ₹${coupon.minOrderValue}`,
+      });
+    }
+
+    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Coupon usage limit reached" });
+    }
+
+    let discount = 0;
+    if (coupon.discountType === "PERCENTAGE") {
+      discount = (orderAmount * coupon.discountValue) / 100;
+      if (coupon.maxDiscount && discount > coupon.maxDiscount) {
+        discount = coupon.maxDiscount;
+      }
+    } else if (coupon.discountType === "FLAT") {
+      discount = coupon.discountValue;
+    }
+
+    const finalAmount = orderAmount - discount;
+
+    coupon.usedCount += 1;
+    await coupon.save();
+
+    res.json({
+      success: true,
+      message: "Coupon applied successfully",
+      discount,
+      finalAmount,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+export const getApplicableCoupons = async (req, res) => {
+    try {
+        const { totalPrice } = req.body;
+
+        if (typeof totalPrice !== 'number' || totalPrice <= 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "A valid positive 'totalPrice' is required in the request body." 
+            });
+        }
+        
+        const currentDate = new Date();
+        
+        // --- Switched to Aggregation Pipeline for field comparison ---
+        const pipeline = [
+            // 1. Initial Filtering (similar to the find() query)
+            {
+                $match: {
+                    status: "ACTIVE",
+                    visibility: "PUBLIC",
+                    startDate: { $lte: currentDate },
+                    expiryDate: { $gt: currentDate },
+                    minOrderValue: { $lte: totalPrice },
+                }
+            },
+            // 2. Filter for Usage Limit (Field-to-Field Comparison)
+            {
+                $match: {
+                    // Check if usageLimit is null (no limit) OR
+                    // if usedCount is less than usageLimit
+                    $or: [
+                        { usageLimit: null },
+                        { $expr: { $lt: ["$usedCount", "$usageLimit"] } }
+                    ]
+                }
+            }
+        ];
+
+        const coupons = await Coupon.aggregate(pipeline);
+
+        // 3. Discount Calculation (JavaScript Logic remains the same)
+        const calculatedCoupons = coupons.map(coupon => {
+            let effectiveDiscount = 0;
+            
+            if (coupon.discountType === "PERCENTAGE") {
+                let calculatedValue = (coupon.discountValue / 100) * totalPrice;
+                
+                if (coupon.maxDiscount !== null && coupon.maxDiscount !== undefined) {
+                    effectiveDiscount = Math.min(calculatedValue, coupon.maxDiscount);
+                } else {
+                    effectiveDiscount = calculatedValue;
+                }
+            } else if (coupon.discountType === "FLAT") {
+                effectiveDiscount = coupon.discountValue;
+            }
+
+            effectiveDiscount = Math.min(effectiveDiscount, totalPrice);
+
+            return {
+                ...coupon,
+                effectiveDiscount,
+                newTotalPrice: totalPrice - effectiveDiscount,
+            };
+        });
+
+        // 4. Sorting and Limiting
+        const topCoupons = calculatedCoupons
+            .sort((a, b) => b.effectiveDiscount - a.effectiveDiscount)
+            .slice(0, 3);
+
+        // 5. Response
+        res.status(200).json({
+            success: true,
+            totalPrice: totalPrice,
+            applicableCoupons: topCoupons,
+        });
+
+    } catch (error) {
+        console.error("Error fetching applicable coupons:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to fetch applicable coupons." 
+        });
+    }
+};

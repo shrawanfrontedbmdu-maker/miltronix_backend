@@ -137,95 +137,74 @@ export const createOrder = async (req, res) => {
     const shippingCost = Number(req.body.shippingCost || 0);
     let discountAmount = Number(req.body.discountAmount || 0);
 
-    // Validate and apply coupon
+    // Calculate coupon discount
     let couponDiscount = 0;
+    let couponError = null;
     let couponId = null;
-    let couponCodeApplied = null;
 
     if (couponCode) {
-      const coupon = await Coupon.findOne({ code: couponCode });
+      try {
+        const coupon = await Coupon.findOne({ code: couponCode });
+        // convert to couponId for downstream checks
+        couponId = coupon?._id;
 
-      if (!coupon) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid coupon code",
-        });
-      }
+        if (!coupon) {
+          couponError = "Coupon not found";
+        } else if (coupon.status !== "active") {
+          couponError = "Coupon is not active";
+        } else if (new Date() > new Date(coupon.expiryDate)) {
+          couponError = "Coupon has expired";
+        } else if (new Date() < new Date(coupon.startDate)) {
+          couponError = "Coupon is not yet valid";
+        } else if (subtotal < coupon.minOrderValue) {
+          couponError = `Minimum order value of ₹${coupon.minOrderValue} required`;
+        } else if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+          couponError = "Coupon usage limit reached";
+        } else {
+          // Check usage per customer
+          if (coupon.usageLimitPerCustomer) {
+            const userOrdersWithCoupon = await Order.countDocuments({
+              userId,
+              couponId,
+            });
 
-      couponId = coupon._id;
+            if (userOrdersWithCoupon >= coupon.usageLimitPerCustomer) {
+              couponError = "You have already used this coupon maximum times";
+            }
+          }
 
-      if (coupon.status !== "ACTIVE") {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon is not active",
-        });
-      }
+          // Check first purchase only
+          if (coupon.firstPurchaseOnly) {
+            const previousOrders = await Order.countDocuments({ userId });
+            if (previousOrders > 0) {
+              couponError = "This coupon is only valid for first purchase";
+            }
+          }
 
-      if (new Date() > new Date(coupon.expiryDate)) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon has expired",
-        });
-      }
+          // Calculate discount if no errors
+          if (!couponError) {
+            if (coupon.discountType === "PERCENTAGE") {
+              couponDiscount = (subtotal * coupon.discountValue) / 100;
+              if (coupon.maxDiscount && couponDiscount > coupon.maxDiscount) {
+                couponDiscount = coupon.maxDiscount;
+              }
+            } else if (coupon.discountType === "FLAT") {
+              couponDiscount = coupon.discountValue;
+            }
 
-      if (new Date() < new Date(coupon.startDate)) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon is not yet valid",
-        });
-      }
-
-      if (subtotal < coupon.minOrderValue) {
-        return res.status(400).json({
-          success: false,
-          message: `Minimum order value of ₹${coupon.minOrderValue} required`,
-        });
-      }
-
-      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon usage limit reached",
-        });
-      }
-
-      // Check per customer usage
-      if (coupon.usageLimitPerCustomer) {
-        const userOrdersWithCoupon = await Order.countDocuments({
-          userId,
-          couponId,
-        });
-
-        if (userOrdersWithCoupon >= coupon.usageLimitPerCustomer) {
-          return res.status(400).json({
-            success: false,
-            message: "You have already used this coupon maximum times",
-          });
+            couponDetails = {
+              couponId: coupon._id,
+              code: coupon.code,
+              title: coupon.title,
+              discountType: coupon.discountType,
+              discountValue: coupon.discountValue,
+              appliedDiscount: couponDiscount,
+            };
+          }
         }
+      } catch (error) {
+        couponError = "Error validating coupon";
       }
-
-      // Check first purchase only
-      if (coupon.firstPurchaseOnly) {
-        const previousOrders = await Order.countDocuments({ userId });
-        if (previousOrders > 0) {
-          return res.status(400).json({
-            success: false,
-            message: "This coupon is only valid for first purchase",
-          });
-        }
-      }
-
-      // Calculate discount
-      if (coupon.discountType === "PERCENTAGE") {
-        couponDiscount = (subtotal * coupon.discountValue) / 100;
-        if (coupon.maxDiscount && couponDiscount > coupon.maxDiscount) {
-          couponDiscount = coupon.maxDiscount;
-        }
-      } else if (coupon.discountType === "FLAT") {
-        couponDiscount = coupon.discountValue;
-      }
-
-      couponCodeApplied = coupon.code;
     }
 
     const totalAmount = +(subtotal + taxAmount + shippingCost - couponDiscount).toFixed(2);
@@ -254,7 +233,7 @@ export const createOrder = async (req, res) => {
       shippingAddress: finalShippingAddress,
       billingAddress: finalBillingAddress,
       coupon: couponId || undefined,
-      couponCode: couponCodeApplied || undefined,
+      couponCode: couponCode || undefined,
       subtotal,
       taxAmount,
       shippingCost,
