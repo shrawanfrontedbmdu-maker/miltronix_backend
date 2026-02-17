@@ -21,6 +21,8 @@ export const signup = async (req, res) => {
     // check mobile duplicate
     const existingMobile = await User.findOne({ mobile });
     if (existingMobile && existingMobile.isVerified) {
+          console.log(existingMobile)
+
       return res.status(400).json({ message: "Mobile already registered" });
     }
 
@@ -28,6 +30,8 @@ export const signup = async (req, res) => {
     if (email) {
       const existingEmail = await User.findOne({ email });
       if (existingEmail && existingEmail.isVerified) {
+            console.log(email)
+
         return res.status(400).json({ message: "Email already registered" });
       }
     }
@@ -55,7 +59,7 @@ export const signup = async (req, res) => {
 
       user = await User.create(userData);
     }
-
+    console.log("user",user)
     await sendOtpSMS(mobile, otp);
     res.status(201).json({ message: "OTP sent successfully" });
 
@@ -96,16 +100,18 @@ export const verifyOtp = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { mobile, password } = req.body;
-
+    console.log(req.body)
     if (!mobile || !password) {
       return res.status(400).json({ message: "Mobile and password required" });
     }
 
-    const user = await User.findOne({ mobile });
+    const user = await User.findOne({ mobile }).select("+password");
     if (!user) return res.status(404).json({ message: "User not found" });
-
+    // log non-sensitive info only
+    console.log({ userId: user._id, mobile: user.mobile, isVerified: user.isVerified });
     if (!user.isVerified) return res.status(401).json({ message: "Verify OTP first" });
-
+    if (!user.password) return res.status(400).json({ message: "No password set for this account — use social login or reset password" });
+    
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 

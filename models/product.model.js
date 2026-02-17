@@ -16,7 +16,7 @@ const variantSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-git 
+
     stockQuantity: { type: Number, required: true, min: 0 },
     stockStatus: {
       type: String,
