@@ -7,6 +7,7 @@ const orderItemSchema = new mongoose.Schema(
     sku: String,
     name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
+    mrp: { type: Number, required: true, min: 0 },
     unitPrice: { type: Number, required: true, min: 0 },
     taxAmount: { type: Number, default: 0 },
     discountAmount: { type: Number, default: 0 },
@@ -126,7 +127,7 @@ orderSchema.pre("save", async function (next) {
   if (Array.isArray(this.items)) {
     this.items.forEach((it) => {
       it.lineTotal =
-        (it.unitPrice || 0) * (it.quantity || 0) -
+        (it.mrp || 0) * (it.quantity || 0) -
         (it.discountAmount || 0) +
         (it.taxAmount || 0);
       this.subtotal += it.lineTotal;

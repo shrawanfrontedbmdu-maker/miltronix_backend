@@ -75,58 +75,67 @@ export const createOrder = async (req, res) => {
     }
 
     // Fetch cart items
-    const cartItems = await Cart.findOne({ user: userId }).populate({
-      path: "items.product",
-      select: "name variants images category",
-    });
+    // Fetch cart with populated product
+    const cart = await Cart.findOne({ user: userId })
+      .populate({
+        path: "items.product",
+        select: "name variants category images",
+      });
 
-    if (!cartItems || cartItems.items.length === 0) {
+    if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Cart is empty",
       });
     }
-
-    // Build order items from cart, validate & get prices from DB
-    const orderItems = [];
-    for (const cartItem of cartItems.items) {
+const orderItems = [];
+    for (const cartItem of cart.items) {
       const product = cartItem.product;
+      if (!product) continue;
 
-      if (!product) {
+      const quantity = cartItem.quantity || 1;
+      const pricePerUnit = Number(cartItem.priceSnapshot || 0);
+
+      // 🔹 STRICT variant check (no fallback)
+      const sku = cartItem.variant?.sku;
+      if (!sku) {
         return res.status(400).json({
-          message: `Product not found for cart item`,
+          success: false,
+          message: "Product variant missing in cart",
         });
       }
 
-      const productId = product._id;
-      const quantity = cartItem.quantity || 1;
-      const sku = cartItem.variant?.sku;
-
-      // Find variant by sku or use first variant
-      let variant = null;
-      if (sku && Array.isArray(product.variants)) {
-        variant = product.variants.find((v) => v.sku === sku);
-      }
-      if (!variant && Array.isArray(product.variants) && product.variants.length) {
-        variant = product.variants[0];
-      }
+      const variant = product.variants?.find(v => v.sku === sku);
 
       if (!variant) {
         return res.status(400).json({
-          message: `Variant not found for product: ${product.name}`,
+          success: false,
+          message: `${product.name} variant is no longer available`,
         });
       }
 
-      const unitPrice = variant.price || 0;
+      // 🔹 Stock validation
+      if (variant.stockQuantity < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `${product.name} is out of stock`,
+        });
+      }
+
+      const cutPricePerUnit = variant.mrp || variant.price || pricePerUnit;
+      const discountPerUnit = Math.max(0, cutPricePerUnit - pricePerUnit);
+      const itemTotal = pricePerUnit * quantity;
 
       orderItems.push({
-        productId,
-        sku: variant.sku,
+        productId: product._id,
+        sku,
         name: product.name,
         quantity,
-        unitPrice,
+        mrp: cutPricePerUnit,
+        unitPrice :pricePerUnit,
         taxAmount: 0,
-        discountAmount: 0,
+        discountAmount: discountPerUnit * quantity,
+        lineTotal: pricePerUnit * quantity,
       });
     }
 
@@ -135,77 +144,100 @@ export const createOrder = async (req, res) => {
     const taxRate = Number(req.body.taxRate || 0);
     const taxAmount = taxRate ? +(subtotal * (taxRate / 100)) : 0;
     const shippingCost = Number(req.body.shippingCost || 0);
-    let discountAmount = Number(req.body.discountAmount || 0);
 
-    // Calculate coupon discount
+    // Validate and apply coupon
     let couponDiscount = 0;
-    let couponError = null;
     let couponId = null;
+    let couponCodeApplied = null;
 
     if (couponCode) {
-      try {
-        const coupon = await Coupon.findOne({ code: couponCode });
-        // convert to couponId for downstream checks
-        couponId = coupon?._id;
-
-        if (!coupon) {
-          couponError = "Coupon not found";
-        } else if (coupon.status !== "active") {
-          couponError = "Coupon is not active";
-        } else if (new Date() > new Date(coupon.expiryDate)) {
-          couponError = "Coupon has expired";
-        } else if (new Date() < new Date(coupon.startDate)) {
-          couponError = "Coupon is not yet valid";
-        } else if (subtotal < coupon.minOrderValue) {
-          couponError = `Minimum order value of ₹${coupon.minOrderValue} required`;
-        } else if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-          couponError = "Coupon usage limit reached";
-        } else {
-          // Check usage per customer
-          if (coupon.usageLimitPerCustomer) {
-            const userOrdersWithCoupon = await Order.countDocuments({
-              userId,
-              couponId,
-            });
-
-            if (userOrdersWithCoupon >= coupon.usageLimitPerCustomer) {
-              couponError = "You have already used this coupon maximum times";
-            }
-          }
-
-          // Check first purchase only
-          if (coupon.firstPurchaseOnly) {
-            const previousOrders = await Order.countDocuments({ userId });
-            if (previousOrders > 0) {
-              couponError = "This coupon is only valid for first purchase";
-            }
-          }
-
-          // Calculate discount if no errors
-          if (!couponError) {
-            if (coupon.discountType === "PERCENTAGE") {
-              couponDiscount = (subtotal * coupon.discountValue) / 100;
-              if (coupon.maxDiscount && couponDiscount > coupon.maxDiscount) {
-                couponDiscount = coupon.maxDiscount;
-              }
-            } else if (coupon.discountType === "FLAT") {
-              couponDiscount = coupon.discountValue;
-            }
-
-            couponDetails = {
-              couponId: coupon._id,
-              code: coupon.code,
-              title: coupon.title,
-              discountType: coupon.discountType,
-              discountValue: coupon.discountValue,
-              appliedDiscount: couponDiscount,
-            };
-          }
-        }
-      } catch (error) {
-        couponError = "Error validating coupon";
+      const coupon = await Coupon.findOne({ code: couponCode });
+      console.log("coupon",coupon)
+      if (!coupon) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid coupon code",
+        });
       }
+
+      couponId = coupon._id;
+
+      if (coupon.status !== "active") {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon is not active",
+        });
+      }
+
+      if (new Date() > new Date(coupon.expiryDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon has expired",
+        });
+      }
+
+      if (new Date() < new Date(coupon.startDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon is not yet valid",
+        });
+      }
+
+      if (subtotal < coupon.minOrderValue) {
+        return res.status(400).json({
+          success: false,
+          message: `Minimum order value of ₹${coupon.minOrderValue} required`,
+        });
+      }
+
+      if (coupon.totalUsage && coupon.usedCount >= coupon.totalUsage) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon usage limit reached",
+        });
+      }
+
+      // Check per customer usage
+      if (coupon.perCustomerLimit) {
+        const userOrdersWithCoupon = await Order.countDocuments({
+          userId,
+          coupon: couponId,
+        });
+         console.log(userOrdersWithCoupon)
+        if (userOrdersWithCoupon >= coupon.perCustomerLimit) {
+          return res.status(400).json({
+            success: false,
+            message: "You have already used this coupon maximum times",
+          });
+        }
+      }
+
+      // Check first purchase only
+      if (coupon.firstPurchaseOnly) {
+        const previousOrders = await Order.countDocuments({ userId });
+        if (previousOrders > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "This coupon is only valid for first purchase",
+          });
+        }
+      }
+
+      // Calculate discount
+      if (coupon.discountType === "PERCENTAGE") {
+        couponDiscount = (subtotal * coupon.discountValue) / 100;
+        if (coupon.maxDiscount && couponDiscount > coupon.maxDiscount) {
+          couponDiscount = coupon.maxDiscount;
+        }
+      } else if (coupon.discountType === "FLAT") {
+        couponDiscount = coupon.discountValue;
+        console.log(couponDiscount)
+      }
+
+      couponCodeApplied = coupon.code;
+
     }
+    console.log(couponDiscount)
 
     const totalAmount = +(subtotal + taxAmount + shippingCost - couponDiscount).toFixed(2);
 
@@ -234,10 +266,10 @@ export const createOrder = async (req, res) => {
       billingAddress: finalBillingAddress,
       coupon: couponId || undefined,
       couponCode: couponCode || undefined,
+      couponDiscount:couponDiscount,
       subtotal,
       taxAmount,
       shippingCost,
-      discountAmount,
       totalAmount,
       currency: req.body.currency || "INR",
       payment: {
@@ -260,7 +292,7 @@ export const createOrder = async (req, res) => {
     }
 
     // Clear cart after order creation
-    await Cart.findOneAndDelete({ user: userId });
+    // await Cart.findOneAndDelete({ user: userId });
 
     res.status(201).json({ message: "Order created successfully", data: newOrder });
   } catch (error) {
