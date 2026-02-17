@@ -1,24 +1,86 @@
 import mongoose from "mongoose";
 
-const CartItemSchema = new mongoose.Schema({
-  product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: false }, 
-  title: String,          
-  images: [{ url: String, public_id: String }],
-  category: String,
-  variant: {
-    sku: String,
-    color: String,
-    size: String,
+/* ================= CART ITEM ================= */
+
+const cartItemSchema = new mongoose.Schema(
+  {
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+
+    variant: {
+      sku: { type: String, required: true },
+      attributes: {
+        color: String,
+        size: String,
+        model: String,
+      },
+    },
+
+    title: { type: String, required: true },
+    category: String,
+
+    images: [
+      {
+        url: { type: String, required: true },
+        public_id: { type: String },
+      },
+    ],
+
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: 1,
+    },
+
+    priceSnapshot: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  quantity: { type: Number, required: true, min: 1 },
-  priceSnapshot: { type: Number, required: true },
-  addedAt: { type: Date, default: Date.now }
-}, { _id: true });
+  { _id: true }
+);
 
-const CartSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true, unique: false, required: false },
-  items: [CartItemSchema],
-  subtotal: { type: Number, default: 0 }
-}, { timestamps: true });
+/* ================= CART ================= */
 
-export default mongoose.model("Cart", CartSchema);
+const cartSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,   // one cart per user
+      index: true,
+    },
+
+    items: [cartItemSchema],
+
+    subtotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+  },
+  { timestamps: true }
+);
+
+/* ================= AUTO SUBTOTAL ================= */
+
+cartSchema.pre("save", function (next) {
+  this.subtotal = this.items.reduce(
+    (total, item) => total + item.priceSnapshot * item.quantity,
+    0
+  );
+  next();
+});
+
+export default mongoose.model("Cart", cartSchema);
