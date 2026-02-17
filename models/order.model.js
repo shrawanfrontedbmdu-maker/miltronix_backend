@@ -15,6 +15,20 @@ const orderItemSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const addressSnapshotSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, required: true, trim: true },
+    houseFlatNo: { type: String, required: true, trim: true },
+    buildingApartment: { type: String, trim: true },
+    streetLocality: { type: String, required: true, trim: true },
+    landmark: { type: String, trim: true },
+    pinCode: { type: String, required: true },
+    city: { type: String, required: true, trim: true },
+    state: { type: String, required: true, trim: true },
+  },
+  { _id: false },
+);
+
 const shipmentSchema = new mongoose.Schema(
   {
     carrier: String,
@@ -51,8 +65,8 @@ const orderSchema = new mongoose.Schema(
       company: String,
     },
     items: { type: [orderItemSchema], default: [] },
-    shippingAddress: { type: mongoose.Schema.Types.Mixed },
-    billingAddress: { type: mongoose.Schema.Types.Mixed },
+    shippingAddress: { type: addressSnapshotSchema, required: true },
+    billingAddress: { type: addressSnapshotSchema, required: true },
     coupon: { type: mongoose.Schema.Types.ObjectId, ref: "Coupon" },
     couponCode: String,
     subtotal: { type: Number, default: 0 },
