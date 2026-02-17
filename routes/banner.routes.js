@@ -1,29 +1,34 @@
-import express from 'express'
+import express from "express";
 import {
-    createBanner,
-    getBannerByPlacement,
-    getBannerByStatus,
-    duplicateBanner,
-    deactivateBanner,
-    deleteBanner,
-    getBanner,
-    getBannerById,
-    editBanner,
-    toggleBannerStatus
-} from '../controllers/banner.controller.js'
-import upload from '../middlewares/multer.js'
+  createBanner,
+  getBanner,
+  getBannerById,
+  editBanner,
+  deleteBanner,
+  toggleBannerStatus,
+  getBannerByStatus,
+} from "../controllers/banner.controller.js";
+
+import upload from "../middlewares/multer.js";
 
 const router = express.Router();
 
-router.get('/', getBanner)
-router.post('/', upload.array('image'), createBanner)
-router.put('/:id', upload.single('image'), editBanner)
-router.get('/:id', getBannerById)
-router.delete('/:id', deleteBanner)
-router.post('/duplicate/:id', duplicateBanner)
-router.get('/:id/status', getBannerByStatus)
-router.put('/:id/status', toggleBannerStatus);
-router.patch('/deactivate/:id', deactivateBanner)
-router.get('/placement/:placement', getBannerByPlacement)
 
-export default router
+router.post("/", upload.single("image"), createBanner);
+
+
+router.get("/", getBanner);
+
+
+router.get("/status", getBannerByStatus);
+
+
+
+router.get("/:id", getBannerById);
+
+router.put("/:id", upload.single("image"), editBanner);
+
+router.patch("/:id/status", toggleBannerStatus);
+router.delete("/:id", deleteBanner);
+
+export default router;
