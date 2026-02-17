@@ -7,10 +7,25 @@ const orderItemSchema = new mongoose.Schema(
     sku: String,
     name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
+    mrp: { type: Number, required: true, min: 0 },
     unitPrice: { type: Number, required: true, min: 0 },
     taxAmount: { type: Number, default: 0 },
     discountAmount: { type: Number, default: 0 },
     lineTotal: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
+const addressSnapshotSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, required: true, trim: true },
+    houseFlatNo: { type: String, required: true, trim: true },
+    buildingApartment: { type: String, trim: true },
+    streetLocality: { type: String, required: true, trim: true },
+    landmark: { type: String, trim: true },
+    pinCode: { type: String, required: true },
+    city: { type: String, required: true, trim: true },
+    state: { type: String, required: true, trim: true },
   },
   { _id: false },
 );
@@ -51,8 +66,8 @@ const orderSchema = new mongoose.Schema(
       company: String,
     },
     items: { type: [orderItemSchema], default: [] },
-    shippingAddress: { type: mongoose.Schema.Types.Mixed },
-    billingAddress: { type: mongoose.Schema.Types.Mixed },
+    shippingAddress: { type: addressSnapshotSchema, required: true },
+    billingAddress: { type: addressSnapshotSchema, required: true },
     coupon: { type: mongoose.Schema.Types.ObjectId, ref: "Coupon" },
     couponCode: String,
     subtotal: { type: Number, default: 0 },
@@ -112,7 +127,7 @@ orderSchema.pre("save", async function (next) {
   if (Array.isArray(this.items)) {
     this.items.forEach((it) => {
       it.lineTotal =
-        (it.unitPrice || 0) * (it.quantity || 0) -
+        (it.mrp || 0) * (it.quantity || 0) -
         (it.discountAmount || 0) +
         (it.taxAmount || 0);
       this.subtotal += it.lineTotal;

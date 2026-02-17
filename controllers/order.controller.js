@@ -1,6 +1,8 @@
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
+import Address from "../models/address.model.js";
+import Cart from "../models/cart.model.js";
 import Coupon from "../models/coupons.model.js";
 
 export const getOrders = async (req, res) => {
@@ -18,111 +20,256 @@ const generateDeliveryNumber = () => {
   return 'DLV-' + Date.now().toString().slice(-6);
 };
 
+/**
+ * Helper: Resolve address from ID, object, or user's default address
+ * @param {string} addressId - ObjectId of saved Address
+ * @param {object} addressObj - Inline address object
+ * @param {string} userId - User ID (to fetch default address)
+ * @returns {Promise<object>} Resolved address object
+ */
+const resolveAddress = async (addressId, addressObj, userId) => {
+  // Case 1: Address ID provided -> fetch from Address collection
+  if (addressId) {
+    const address = await Address.findById(addressId);
+    if (!address) throw new Error("Address not found");
+    return address.toObject();
+  }
+
+  // Case 2: Address object provided inline -> use it
+  if (addressObj && typeof addressObj === "object" && Object.keys(addressObj).length > 0) {
+    return addressObj;
+  }
+
+  // Case 3: No address provided -> try user's default address
+  if (userId) {
+    const address = await Address.findOne({ userId, isDefault: true });
+    if (address) return address.toObject();
+  }
+
+  throw new Error("Shipping address is required (provide addressId, address object, or set a default address)");
+};
+
+
 export const createOrder = async (req, res) => {
   try {
-    // accept legacy `products` or preferred `items`
-    const incoming = Array.isArray(req.body.products) && req.body.products.length
-      ? req.body.products
-      : Array.isArray(req.body.items) && req.body.items.length
-      ? req.body.items
-      : [];
-
-    const { user: userId, customer: customerBody, customerName, couponCode } = req.body;
+    const { user: userId, customer: customerBody, customerName, couponCode, shippingAddressId, shippingAddress, billingAddressId, billingAddress,paymentMethod} = req.body;
 
     console.log("Incoming order body:", req.body);
 
-    if (!incoming || incoming.length === 0) {
-      return res.status(400).json({ message: "Products array is required and cannot be empty." });
-    }
-
-    // validate & build order items from DB (don't trust client prices)
-    const orderItems = [];
-
-    for (const p of incoming) {
-      const productId = p.productId || p._id;
-      const quantity = Number(p.quantity || p.qty || 0);
-
-      if (!productId || quantity <= 0) {
-        return res.status(400).json({ message: "Each product must include productId and a positive quantity." });
-      }
-
-      const product = await Product.findById(productId).lean();
-      if (!product) return res.status(400).json({ message: `Product not found: ${productId}` });
-
-      // choose variant by sku (if provided) or fallback to first variant
-      let variant = null;
-      if (p.sku && Array.isArray(product.variants)) {
-        variant = product.variants.find((v) => v.sku === p.sku);
-      }
-      if (!variant && Array.isArray(product.variants) && product.variants.length) {
-        variant = product.variants[0];
-      }
-
-      const unitPrice = (variant && typeof variant.price === "number") ? variant.price : Number(p.unitPrice || 0);
-
-      orderItems.push({
-        productId: product._id,
-        sku: variant ? variant.sku : undefined,
-        name: product.name,
-        quantity,
-        unitPrice,
-        taxAmount: 0,
-        discountAmount: 0,
+    // Validate required fields (either address object or id must be provided)
+    if (!shippingAddress && !shippingAddressId) {
+      return res.status(400).json({
+        success: false,
+        message: "Shipping address or shippingAddressId is required",
       });
     }
 
-    // compute totals server-side
+    // Validate user exists
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    // Fetch cart items
+    // Fetch cart with populated product
+    const cart = await Cart.findOne({ user: userId })
+      .populate({
+        path: "items.product",
+        select: "name variants category images",
+      });
+
+    if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cart is empty",
+      });
+    }
+const orderItems = [];
+    for (const cartItem of cart.items) {
+      const product = cartItem.product;
+      if (!product) continue;
+
+      const quantity = cartItem.quantity || 1;
+      const pricePerUnit = Number(cartItem.priceSnapshot || 0);
+
+      // 🔹 STRICT variant check (no fallback)
+      const sku = cartItem.variant?.sku;
+      if (!sku) {
+        return res.status(400).json({
+          success: false,
+          message: "Product variant missing in cart",
+        });
+      }
+
+      const variant = product.variants?.find(v => v.sku === sku);
+
+      if (!variant) {
+        return res.status(400).json({
+          success: false,
+          message: `${product.name} variant is no longer available`,
+        });
+      }
+
+      // 🔹 Stock validation
+      if (variant.stockQuantity < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `${product.name} is out of stock`,
+        });
+      }
+
+      const cutPricePerUnit = variant.mrp || variant.price || pricePerUnit;
+      const discountPerUnit = Math.max(0, cutPricePerUnit - pricePerUnit);
+      const itemTotal = pricePerUnit * quantity;
+
+      orderItems.push({
+        productId: product._id,
+        sku,
+        name: product.name,
+        quantity,
+        mrp: cutPricePerUnit,
+        unitPrice :pricePerUnit,
+        taxAmount: 0,
+        discountAmount: discountPerUnit * quantity,
+        lineTotal: pricePerUnit * quantity,
+      });
+    }
+
+    // Compute totals server-side
     const subtotal = orderItems.reduce((s, it) => s + (it.unitPrice || 0) * (it.quantity || 0), 0);
     const taxRate = Number(req.body.taxRate || 0);
     const taxAmount = taxRate ? +(subtotal * (taxRate / 100)) : 0;
     const shippingCost = Number(req.body.shippingCost || 0);
-    let discountAmount = Number(req.body.discountAmount || 0);
 
-    // coupon best-effort validation
-    let coupon = null;
+    // Validate and apply coupon
+    let couponDiscount = 0;
+    let couponId = null;
+    let couponCodeApplied = null;
+
     if (couponCode) {
-      coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
-      if (coupon) {
-        const now = new Date();
-        if (coupon.status !== "active" || coupon.startDate > now || coupon.expiryDate < now) {
-          coupon = null;
-        } else {
-          if (coupon.discountType === "percentage") {
-            discountAmount = Math.min((subtotal * (coupon.discountValue / 100)), coupon.maxDiscount || Infinity);
-          } else {
-            discountAmount = coupon.discountValue;
-          }
+      const coupon = await Coupon.findOne({ code: couponCode });
+      console.log("coupon",coupon)
+      if (!coupon) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid coupon code",
+        });
+      }
+
+      couponId = coupon._id;
+
+      if (coupon.status !== "active") {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon is not active",
+        });
+      }
+
+      if (new Date() > new Date(coupon.expiryDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon has expired",
+        });
+      }
+
+      if (new Date() < new Date(coupon.startDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon is not yet valid",
+        });
+      }
+
+      if (subtotal < coupon.minOrderValue) {
+        return res.status(400).json({
+          success: false,
+          message: `Minimum order value of ₹${coupon.minOrderValue} required`,
+        });
+      }
+
+      if (coupon.totalUsage && coupon.usedCount >= coupon.totalUsage) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon usage limit reached",
+        });
+      }
+
+      // Check per customer usage
+      if (coupon.perCustomerLimit) {
+        const userOrdersWithCoupon = await Order.countDocuments({
+          userId,
+          coupon: couponId,
+        });
+         console.log(userOrdersWithCoupon)
+        if (userOrdersWithCoupon >= coupon.perCustomerLimit) {
+          return res.status(400).json({
+            success: false,
+            message: "You have already used this coupon maximum times",
+          });
         }
       }
+
+      // Check first purchase only
+      if (coupon.firstPurchaseOnly) {
+        const previousOrders = await Order.countDocuments({ userId });
+        if (previousOrders > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "This coupon is only valid for first purchase",
+          });
+        }
+      }
+
+      // Calculate discount
+      if (coupon.discountType === "PERCENTAGE") {
+        couponDiscount = (subtotal * coupon.discountValue) / 100;
+        if (coupon.maxDiscount && couponDiscount > coupon.maxDiscount) {
+          couponDiscount = coupon.maxDiscount;
+        }
+      } else if (coupon.discountType === "FLAT") {
+        couponDiscount = coupon.discountValue;
+        console.log(couponDiscount)
+      }
+
+      couponCodeApplied = coupon.code;
+
     }
+    console.log(couponDiscount)
 
-    const totalAmount = +(subtotal + taxAmount + shippingCost - discountAmount);
+    const totalAmount = +(subtotal + taxAmount + shippingCost - couponDiscount).toFixed(2);
 
-    // customer snapshot (prefer user if provided)
-    let customer = {};
-    if (userId) {
-      const user = await User.findById(userId).lean();
-      if (user) customer = { name: user.fullName, email: user.email, phone: user.mobile };
-    } else if (customerBody && customerBody.name) {
-      customer = { name: customerBody.name, email: customerBody.email, phone: customerBody.phone };
-    } else if (customerName) {
-      customer = { name: customerName };
-    } else {
-      return res.status(400).json({ message: "Customer name or user id is required." });
+    // Customer snapshot (prefer user data)
+    const customer = {
+      name: user.fullName || customerName || customerBody?.name || "Customer",
+      email: user.email || customerBody?.email,
+      phone: user.mobile || customerBody?.phone,
+      company: customerBody?.company,
+    };
+
+    // Resolve shipping & billing addresses (ID -> object, fallback to default)
+    let finalShippingAddress, finalBillingAddress;
+    try {
+      finalShippingAddress = await resolveAddress(shippingAddressId, shippingAddress, userId);
+      finalBillingAddress = await resolveAddress(billingAddressId, billingAddress || shippingAddress, userId);
+    } catch (err) {
+      return res.status(400).json({ message: err.message });
     }
 
     const orderDoc = {
-      user: userId || undefined,
+      user: userId,
       customer,
       items: orderItems,
-      shippingAddress: req.body.shippingAddress || {},
-      billingAddress: req.body.billingAddress || req.body.billingAddress || req.body.shippingAddress || {},
-      coupon: coupon ? coupon._id : undefined,
-      couponCode: coupon ? coupon.code : (req.body.couponCode ? req.body.couponCode.toUpperCase() : undefined),
+      shippingAddress: finalShippingAddress,
+      billingAddress: finalBillingAddress,
+      coupon: couponId || undefined,
+      couponCode: couponCode || undefined,
+      couponDiscount:couponDiscount,
       subtotal,
       taxAmount,
       shippingCost,
-      discountAmount,
       totalAmount,
       currency: req.body.currency || "INR",
       payment: {
@@ -139,10 +286,13 @@ export const createOrder = async (req, res) => {
 
     const newOrder = await Order.create(orderDoc);
 
-    // increment coupon usage (best-effort)
-    if (coupon) {
-      await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usedCount: 1 } }).catch(() => {});
+    // Increment coupon usage
+    if (couponId) {
+      await Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } }).catch(() => {});
     }
+
+    // Clear cart after order creation
+    // await Cart.findOneAndDelete({ user: userId });
 
     res.status(201).json({ message: "Order created successfully", data: newOrder });
   } catch (error) {

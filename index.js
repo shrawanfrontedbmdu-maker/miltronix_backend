@@ -30,6 +30,8 @@ import storeInventoryRoutes from "./routes/store.inventory.routes.js";
 import infosectionRoutes from "./routes/infosection.routes.js";
 // import recommendationsRoutes from "./routes/recommendations.route.js";
 import addressRoutes from "./routes/address.routes.js";
+import checkoutRoutes from "./routes/checkout.route.js";
+import couponRoutes from "./routes/coupons.route.js";
 
 const app = express();
 
@@ -81,6 +83,8 @@ app.use("/api/infosections", infosectionRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/stores", storeRoutes);
 app.use("/api/store-inventory", storeInventoryRoutes);
+app.use("/api/checkout", checkoutRoutes);
+app.use("/api/coupons",couponRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
 app.use("/api/addresses", addressRoutes);
 
