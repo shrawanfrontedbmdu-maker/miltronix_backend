@@ -9,6 +9,9 @@ import cors from "cors";
 // Routes
 import productRoutes from "./routes/product.route.js";
 import categoryRoutes from "./routes/category.routes.js";
+import subcategoryRoutes from "./routes/subcategory.route.js";
+import filterGroupRoutes from "./routes/filterGroup.route.js";
+import filterOptionRoutes from "./routes/filterOption.route.js";
 import orderRoutes from "./routes/order.route.js";
 import authRoutes from "./routes/auth.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
@@ -59,6 +62,9 @@ connectDb();
 // ------------------- ROUTES -------------------
 app.use("/api/products", productRoutes);
 app.use("/api/category", categoryRoutes);
+app.use("/api/subcategory", subcategoryRoutes);
+app.use("/api/filter-groups", filterGroupRoutes);
+app.use("/api/filter-options", filterOptionRoutes);
 // app.use("/api/brand", brandRouter);
 app.use("/api/orders", orderRoutes);
 app.use("/api/auth", authRoutes);

@@ -15,9 +15,11 @@ import { verifyStore } from "../middlewares/verifyAdmin.js";
 
 const router = express.Router();
 
-// store owner endpoints (must be logged in user linked to store)
+// add stock 
 router.post('/inventory', verifyStore, createOrUpdateInventory);
+
 router.patch('/inventory/:inventoryId', verifyStore, updateInventory);
+
 router.get('/inventory', verifyStore, getStoreInventory);
 
 // public: list inventory for a product across stores
