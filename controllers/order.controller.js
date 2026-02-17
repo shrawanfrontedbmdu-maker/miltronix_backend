@@ -52,9 +52,17 @@ const resolveAddress = async (addressId, addressObj, userId) => {
 
 export const createOrder = async (req, res) => {
   try {
-    const { user: userId, customer: customerBody, customerName, couponCode, shippingAddressId, shippingAddress, billingAddressId, billingAddress } = req.body;
+    const { user: userId, customer: customerBody, customerName, couponCode, shippingAddressId, shippingAddress, billingAddressId, billingAddress,paymentMethod} = req.body;
 
     console.log("Incoming order body:", req.body);
+
+    // Validate required fields (either address object or id must be provided)
+    if (!shippingAddress && !shippingAddressId) {
+      return res.status(400).json({
+        success: false,
+        message: "Shipping address or shippingAddressId is required",
+      });
+    }
 
     // Validate user exists
     if (!userId) {
@@ -129,25 +137,7 @@ export const createOrder = async (req, res) => {
     const shippingCost = Number(req.body.shippingCost || 0);
     let discountAmount = Number(req.body.discountAmount || 0);
 
-    // Coupon validation
-    let coupon = null;
-    if (couponCode) {
-      coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
-      if (coupon) {
-        const now = new Date();
-        if (coupon.status !== "active" || coupon.startDate > now || coupon.expiryDate < now) {
-          coupon = null;
-        } else {
-          if (coupon.discountType === "percentage") {
-            discountAmount = Math.min((subtotal * (coupon.discountValue / 100)), coupon.maxDiscount || Infinity);
-          } else {
-            discountAmount = coupon.discountValue;
-          }
-        }
-      }
-    }
-
-        // Validate and apply coupon
+    // Validate and apply coupon
     let couponDiscount = 0;
     let couponId = null;
     let couponCodeApplied = null;
@@ -263,8 +253,8 @@ export const createOrder = async (req, res) => {
       items: orderItems,
       shippingAddress: finalShippingAddress,
       billingAddress: finalBillingAddress,
-      coupon: coupon ? coupon._id : undefined,
-      couponCode: coupon ? coupon.code : undefined,
+      coupon: couponId || undefined,
+      couponCode: couponCodeApplied || undefined,
       subtotal,
       taxAmount,
       shippingCost,
@@ -286,8 +276,8 @@ export const createOrder = async (req, res) => {
     const newOrder = await Order.create(orderDoc);
 
     // Increment coupon usage
-    if (coupon) {
-      await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usedCount: 1 } }).catch(() => {});
+    if (couponId) {
+      await Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } }).catch(() => {});
     }
 
     // Clear cart after order creation

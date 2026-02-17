@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import Cart from "../models/cart.model.js";
 import Product from "../models/product.model.js";
 
@@ -80,7 +79,6 @@ export const addItemToCart = async (req, res) => {
 };
 
 
-
 // ---------------- GET CART ----------------
 export const getCart = async (req, res) => {
   try {
@@ -102,6 +100,7 @@ export const getCart = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch cart", error: err.message });
   }
 };
+
 
 export const removeFromCart = async (req, res) => {
   try {
