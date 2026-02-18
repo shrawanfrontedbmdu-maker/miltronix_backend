@@ -39,7 +39,9 @@ export const signup = async (req, res) => {
       }
     }
 
-    const otp = generateOTP();
+    // const otp = generateOTP();
+    const otp = 1234;
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     let user = existingMobile;

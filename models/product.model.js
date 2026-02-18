@@ -161,7 +161,8 @@ productSchema.pre("save", function (next) {
 // enforce global uniqueness for variant SKUs (each array element is indexed)
 productSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 // Text search for product listing/search
-productSchema.index({ name: "text", description: "text", tags: "text" });
+productSchema.index({ name: "text", description: "text", brand: "text", tags: "text" });
+
 // Useful compound indexes for listing/filtering
 productSchema.index({ category: 1, status: 1, isRecommended: 1 });
 

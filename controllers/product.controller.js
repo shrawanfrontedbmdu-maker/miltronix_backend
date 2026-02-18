@@ -383,3 +383,87 @@ export const getRecommendedProducts = async (req, res) => {
   }
 };
 
+import mongoose from "mongoose";
+
+export const searchProducts = async (req, res) => {
+  try {
+    const { q, category } = req.query;
+
+    let filter = {
+      status: "active",
+      isArchived: false,
+    };
+
+    if (q) {
+      filter.$text = { $search: q };
+    }
+
+    if (category) {
+      filter.category = category;
+    }
+
+    const products = await Product.find(
+      filter,
+      q
+        ? { score: { $meta: "textScore" } }
+        : {}
+    )
+      .sort(
+        q
+          ? { score: { $meta: "textScore" } }
+          : { createdAt: -1 }
+      )
+      .lean();
+
+    res.json({
+      success: true,
+      count: products.length,
+      products,
+    });
+  } catch (error) {
+    console.error("Full search error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Search failed",
+    });
+  }
+};
+
+
+export const searchSuggestions = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      return res.json({ success: true, products: [] });
+    }
+
+    const products = await Product.find(
+      {
+        status: "active",
+        isArchived: false,
+        $text: { $search: q },
+      },
+      {
+        score: { $meta: "textScore" },
+      }
+    )
+      .sort({ score: { $meta: "textScore" } })
+      .limit(6)
+      .lean();
+
+    res.json({
+      success: true,
+      products,
+    });
+  } catch (error) {
+    console.error("Search suggestion error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Search failed",
+    });
+  }
+};
+
+
+
