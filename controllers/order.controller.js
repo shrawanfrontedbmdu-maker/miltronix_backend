@@ -4,6 +4,7 @@ import User from "../models/user.model.js";
 import Address from "../models/address.model.js";
 import Cart from "../models/cart.model.js";
 import Coupon from "../models/coupons.model.js";
+import orderModel from "../models/order.model.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -17,7 +18,7 @@ export const getOrders = async (req, res) => {
 };
 
 const generateDeliveryNumber = () => {
-  return 'DLV-' + Date.now().toString().slice(-6);
+  return "DLV-" + Date.now().toString().slice(-6);
 };
 
 /**
@@ -36,7 +37,11 @@ const resolveAddress = async (addressId, addressObj, userId) => {
   }
 
   // Case 2: Address object provided inline -> use it
-  if (addressObj && typeof addressObj === "object" && Object.keys(addressObj).length > 0) {
+  if (
+    addressObj &&
+    typeof addressObj === "object" &&
+    Object.keys(addressObj).length > 0
+  ) {
     return addressObj;
   }
 
@@ -46,13 +51,24 @@ const resolveAddress = async (addressId, addressObj, userId) => {
     if (address) return address.toObject();
   }
 
-  throw new Error("Shipping address is required (provide addressId, address object, or set a default address)");
+  throw new Error(
+    "Shipping address is required (provide addressId, address object, or set a default address)",
+  );
 };
-
 
 export const createOrder = async (req, res) => {
   try {
-    const { user: userId, customer: customerBody, customerName, couponCode, shippingAddressId, shippingAddress, billingAddressId, billingAddress,paymentMethod} = req.body;
+    const userId = req.user._id;
+    const {
+      customer: customerBody,
+      customerName,
+      couponCode,
+      shippingAddressId,
+      shippingAddress,
+      billingAddressId,
+      billingAddress,
+      paymentMethod,
+    } = req.body;
 
     console.log("Incoming order body:", req.body);
 
@@ -76,11 +92,10 @@ export const createOrder = async (req, res) => {
 
     // Fetch cart items
     // Fetch cart with populated product
-    const cart = await Cart.findOne({ user: userId })
-      .populate({
-        path: "items.product",
-        select: "name variants category images",
-      });
+    const cart = await Cart.findOne({ user: userId }).populate({
+      path: "items.product",
+      select: "name variants category images",
+    });
 
     if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
       return res.status(400).json({
@@ -88,7 +103,7 @@ export const createOrder = async (req, res) => {
         message: "Cart is empty",
       });
     }
-const orderItems = [];
+    const orderItems = [];
     for (const cartItem of cart.items) {
       const product = cartItem.product;
       if (!product) continue;
@@ -105,7 +120,7 @@ const orderItems = [];
         });
       }
 
-      const variant = product.variants?.find(v => v.sku === sku);
+      const variant = product.variants?.find((v) => v.sku === sku);
 
       if (!variant) {
         return res.status(400).json({
@@ -132,7 +147,7 @@ const orderItems = [];
         name: product.name,
         quantity,
         mrp: cutPricePerUnit,
-        unitPrice :pricePerUnit,
+        unitPrice: pricePerUnit,
         taxAmount: 0,
         discountAmount: discountPerUnit * quantity,
         lineTotal: pricePerUnit * quantity,
@@ -140,7 +155,10 @@ const orderItems = [];
     }
 
     // Compute totals server-side
-    const subtotal = orderItems.reduce((s, it) => s + (it.unitPrice || 0) * (it.quantity || 0), 0);
+    const subtotal = orderItems.reduce(
+      (s, it) => s + (it.unitPrice || 0) * (it.quantity || 0),
+      0,
+    );
     const taxRate = Number(req.body.taxRate || 0);
     const taxAmount = taxRate ? +(subtotal * (taxRate / 100)) : 0;
     const shippingCost = Number(req.body.shippingCost || 0);
@@ -152,7 +170,7 @@ const orderItems = [];
 
     if (couponCode) {
       const coupon = await Coupon.findOne({ code: couponCode });
-      console.log("coupon",coupon)
+      console.log("coupon", coupon);
       if (!coupon) {
         return res.status(400).json({
           success: false,
@@ -203,7 +221,7 @@ const orderItems = [];
           userId,
           coupon: couponId,
         });
-         console.log(userOrdersWithCoupon)
+        console.log(userOrdersWithCoupon);
         if (userOrdersWithCoupon >= coupon.perCustomerLimit) {
           return res.status(400).json({
             success: false,
@@ -231,15 +249,19 @@ const orderItems = [];
         }
       } else if (coupon.discountType === "FLAT") {
         couponDiscount = coupon.discountValue;
-        console.log(couponDiscount)
+        console.log(couponDiscount);
       }
 
       couponCodeApplied = coupon.code;
-
     }
-    console.log(couponDiscount)
+    console.log(couponDiscount);
 
-    const totalAmount = +(subtotal + taxAmount + shippingCost - couponDiscount).toFixed(2);
+    const totalAmount = +(
+      subtotal +
+      taxAmount +
+      shippingCost -
+      couponDiscount
+    ).toFixed(2);
 
     // Customer snapshot (prefer user data)
     const customer = {
@@ -252,8 +274,16 @@ const orderItems = [];
     // Resolve shipping & billing addresses (ID -> object, fallback to default)
     let finalShippingAddress, finalBillingAddress;
     try {
-      finalShippingAddress = await resolveAddress(shippingAddressId, shippingAddress, userId);
-      finalBillingAddress = await resolveAddress(billingAddressId, billingAddress || shippingAddress, userId);
+      finalShippingAddress = await resolveAddress(
+        shippingAddressId,
+        shippingAddress,
+        userId,
+      );
+      finalBillingAddress = await resolveAddress(
+        billingAddressId,
+        billingAddress || shippingAddress,
+        userId,
+      );
     } catch (err) {
       return res.status(400).json({ message: err.message });
     }
@@ -266,7 +296,7 @@ const orderItems = [];
       billingAddress: finalBillingAddress,
       coupon: couponId || undefined,
       couponCode: couponCode || undefined,
-      couponDiscount:couponDiscount,
+      couponDiscount: couponDiscount,
       subtotal,
       taxAmount,
       shippingCost,
@@ -277,7 +307,7 @@ const orderItems = [];
         status: req.body.paymentStatus || "Pending",
         transactionId: req.body.transactionId || undefined,
       },
-      fulfillment: { orderStatus: req.body.orderStatus || "Processing" },
+      fulfillment: { orderStatus: req.body.orderStatus || "Pending" },
       priority: req.body.priority || "Normal",
       notes: req.body.notes || "",
       isActive: true,
@@ -288,19 +318,27 @@ const orderItems = [];
 
     // Increment coupon usage
     if (couponId) {
-      await Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } }).catch(() => {});
+      await Coupon.findByIdAndUpdate(couponId, {
+        $inc: { usedCount: 1 },
+      }).catch(() => {});
     }
 
     // Clear cart after order creation
     // await Cart.findOneAndDelete({ user: userId });
 
-    res.status(201).json({ message: "Order created successfully", data: newOrder });
+    res
+      .status(201)
+      .json({ message: "Order created successfully", data: newOrder });
   } catch (error) {
     console.error("Order creation failed:", error);
     if (error.name === "ValidationError") {
-      return res.status(400).json({ message: "Validation Error", errors: error.errors });
+      return res
+        .status(400)
+        .json({ message: "Validation Error", errors: error.errors });
     }
-    res.status(500).json({ message: "Couldn't create order", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Couldn't create order", error: error.message });
   }
 };
 
@@ -450,7 +488,9 @@ export const editOrderById = async (req, res) => {
     }
 
     const findTrackingid = await Order.findById(id);
-    const trackingnumber = findTrackingid.trackingnumber ? findTrackingid.trackingnumber : "";
+    const trackingnumber = findTrackingid.trackingnumber
+      ? findTrackingid.trackingnumber
+      : "";
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
       {
@@ -462,7 +502,7 @@ export const editOrderById = async (req, res) => {
         totalAmount,
         trackingnumber,
       },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedOrder) {
@@ -508,6 +548,112 @@ export const deleteOrderById = async (req, res) => {
     console.error("Error deleting order:", error);
     res.status(500).json({
       message: "Couldn't delete order",
+      error: error.message,
+    });
+  }
+};
+
+// Get all orders for a user
+export const getUserOrders = async (req, res) => {
+  try {
+    const user = req.user._id;
+    console.log(user);
+    const { page = 1, limit = 10, status } = req.query;
+
+    const query = { user };
+    if (status) {
+      query.orderStatus = status;
+    }
+    console.log(query);
+
+    const orders = await orderModel
+      .find(query)
+      .populate({
+        path: "items.productId",
+        select: "images", // adjust based on your product schema
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .lean();
+
+    console.log(orders);
+
+    const total = await orderModel.countDocuments(query);
+    const updatedOrders = orders.map((order) => {
+      order.items = order.items.map((item) => {
+        const product = item.productId;
+
+        let image = null;
+
+        if (product) {
+          // find variant using SKU
+          const variant = product.variants?.find((v) => v.sku === item.sku);
+
+          // 1️⃣ Variant image
+          if (variant?.imageUrl) {
+            image = variant.imageUrl;
+          }
+          // 2️⃣ Product main image fallback
+          else if (product.images?.length > 0) {
+            image = product.images[0];
+          }
+        }
+
+        return {
+          ...item,
+          image,
+        };
+      });
+
+      return order;
+    });
+
+    return res.status(200).json({
+      success: true,
+      orders: updatedOrders,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      totalOrders: total,
+    });
+  } catch (error) {
+    console.error("Get user orders error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching orders",
+      error: error.message,
+    });
+  }
+};
+
+// Get single order details
+export const getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params.id;
+    const user = req.user._id;
+
+    const order = await orderModel
+      .findOne({ orderId, user })
+      .lean()
+      .populate("items.productId")
+      .populate("coupon");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      order,
+    });
+  } catch (error) {
+    console.error("Get order by ID error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching order",
       error: error.message,
     });
   }

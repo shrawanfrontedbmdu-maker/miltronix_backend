@@ -7,12 +7,14 @@ import {
   getOrdersLastMonth,
   getOrdersThisYear,
   getOrdersThisMonth,
+  getUserOrders,
 } from "../controllers/order.controller.js";
+import authMiddleware from "../middlewares/auth.js";
 
 const router = express.Router();
 
 router.get("/", getOrders);
-router.post("/", createOrder);
+router.post("/", authMiddleware, createOrder);
 router.get("/by-month", getOrdersByMonth);
 router.put("/:id", editOrderById);
 router.get("/this-month", getOrdersThisMonth);

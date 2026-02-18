@@ -3,6 +3,9 @@ import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import User from "../models/user.model.js";
 import { sendOtpSMS } from "../utils/sendOtp.js";
+import mongoose from "mongoose";
+import Order from "../models/order.model.js";
+import Wishlist from "../models/wishlist.model.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -217,5 +220,98 @@ export const googleLogin = async (req, res) => {
     res.json({ token, user });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+
+export const getUserProfile = async (req, res) => {
+  try {
+    const id= req.user._id;
+    console.log(id)
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        status: 400,
+        message: "Invalid user id",
+      });
+    }
+
+    const user = await User.findById(id).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        status: 404,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      status: 200,
+      message: "User profile retrieved successfully",
+      user: user
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: 500,
+      message: err.message,
+    });
+  }
+};
+
+export const updateUserProfile = async (req, res) => {
+  try {
+    const updates = Object.fromEntries(
+      Object.entries(req.body).filter(([_, v]) => v !== undefined)
+    );
+
+    const user = await User.findByIdAndUpdate(req.user.id, updates, {
+      new: true,
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        status: 404,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      status: 200,
+      message: "User profile updated successfully",
+      user,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 500,
+      message: err.message,
+    });
+  }
+};
+
+/* ================= GET WISHLIST BY USER ================= */
+export const getMyWishlist = async (req, res) => {
+  try {
+    const userId  = req.user._id;
+
+    const wishlist = await Wishlist.findOne({ user: userId })
+      .populate("items.product");
+
+    if (!wishlist) {
+      return res.status(404).json({
+        success: false,
+        message: "Wishlist not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      wishlist
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 };
