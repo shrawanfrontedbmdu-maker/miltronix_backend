@@ -49,6 +49,12 @@ const variantSchema = new mongoose.Schema(
         value: { type: mongoose.Schema.Types.Mixed },
       },
     ],
+    keyFeatures: [
+      {
+        key: { type: String },
+        value: { type: mongoose.Schema.Types.Mixed },
+      },
+    ],
     isActive: { type: Boolean, default: true },
   },
   { _id: false },

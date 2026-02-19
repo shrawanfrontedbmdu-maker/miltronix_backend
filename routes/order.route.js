@@ -13,11 +13,12 @@ import {
   cancelOrder,
 } from "../controllers/order.controller.js";
 import authMiddleware from "../middlewares/auth.js";
+import { verifyAdmin } from "../middlewares/verifyAdmin.js";
 
 const router = express.Router();
 
 // ─── Admin / General ───────────────────────────────────────────────
-router.get("/", authMiddleware, getOrders);               // all orders (add admin check if needed)
+router.get("/", getOrders);               // all orders (add admin check if needed)
 router.get("/by-month", getOrdersByMonth);
 router.get("/this-month", getOrdersThisMonth);
 router.get("/last-month", getOrdersLastMonth);

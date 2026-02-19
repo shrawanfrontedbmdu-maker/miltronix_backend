@@ -1,5 +1,7 @@
 import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
+import Subcategory from "../models/subcategory.model.js";
+import FilterOption from "../models/filterOption.model.js";
 import { uploadImage, deleteImage } from "../utils/cloudinary.js";
 
 /* ================= HELPERS ================= */
@@ -24,6 +26,8 @@ export const createProduct = async (req, res) => {
       productKey,
       description,
       category,
+      subcategory,
+      filterOptions,
       images,
       specifications,
       keyFeatures,
@@ -32,40 +36,32 @@ export const createProduct = async (req, res) => {
       warranty,
       returnPolicy,
       tags,
+      keywords,
       isRecommended,
       isFeatured,
       isDigital,
       status,
       metaTitle,
       metaDescription,
-      keywords,
     } = req.body;
 
-    /* ================= PARSE JSON FIELDS ================= */
-    specifications = parseJSON(specifications, []);
-    keyFeatures = parseJSON(keyFeatures, []);
-    variants = parseJSON(variants, []);
-    tags = parseJSON(tags, []);
-    keywords = parseJSON(keywords, []);
-    images = parseJSON(images, []);
+    specifications = parseJSON(specifications);
+    keyFeatures = parseJSON(keyFeatures);
+    variants = parseJSON(variants);
+    tags = parseJSON(tags);
+    keywords = parseJSON(keywords);
+    filterOptions = parseJSON(filterOptions);
+    images = parseJSON(images);
 
-    /* ================= TRIM FIELDS ================= */
-    name = name?.trim();
-    productKey = productKey?.trim();
-    description = description?.trim();
-    warranty = warranty?.trim();
-    returnPolicy = returnPolicy?.trim();
-    brand = brand?.trim();
-
-    if (!slug && name) slug = generateSlug(name);
-
-    /* ================= REQUIRED FIELDS ================= */
+    /* ================= REQUIRED CHECK ================= */
     if (!name || !productKey || !description || !category || !warranty || !returnPolicy) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
       });
     }
+
+if (!slug && name) slug = generateSlug(name);
 
     /* ================= CATEGORY CHECK ================= */
     const categoryDoc = await Category.findById(category);
@@ -76,23 +72,96 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    /* ================= IMAGE HANDLING ================= */
+    /* ================= SUBCATEGORY CHECK ================= */
+    if (subcategory) {
+      const sub = await Subcategory.findById(subcategory);
+      if (!sub) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid subcategory",
+        });
+      }
+
+      if (sub.category.toString() !== category) {
+        return res.status(400).json({
+          success: false,
+          message: "Subcategory does not belong to selected category",
+        });
+      }
+    }
+
+    /* ================= FILTER CHECK ================= */
+    if (filterOptions?.length > 0) {
+      const validFilters = await filterOptions.find({
+        _id: { $in: filterOptions },
+      });
+
+      if (validFilters.length !== filterOptions.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid filter options",
+        });
+      }
+    }
+
+    /* ================= IMAGE UPLOAD ================= */
     let finalImages = [];
+    // we'll also capture variant-specific uploaded files
+    const variantFileMap = {};
 
     if (req.files && req.files.length > 0) {
+      // separate main product files from variant files
+      const mainFiles = [];
+      req.files.forEach((file) => {
+        const match = file.fieldname.match(/^variantImage_(\d+)$/);
+        if (match) {
+          const idx = parseInt(match[1], 10);
+          variantFileMap[idx] = variantFileMap[idx] || [];
+          variantFileMap[idx].push(file);
+        } else {
+          mainFiles.push(file);
+        }
+      });
+
+      // upload main images
       finalImages = await Promise.all(
-        req.files.map(async (file) => {
-          const img = await uploadImage(file.buffer);
+        mainFiles.map(async (file) => {
+          const uploaded = await uploadImage(file.buffer);
           return {
-            url: img.secure_url,
-            public_id: img.public_id,
+            url: uploaded.secure_url,
+            public_id: uploaded.public_id,
             alt: name,
           };
         })
       );
-    } else if (images.length > 0) {
+
+      // upload variant files and merge into variants array
+      if (variants && Array.isArray(variants)) {
+        for (const [idxStr, files] of Object.entries(variantFileMap)) {
+          const idx = parseInt(idxStr, 10);
+          const uploadedImgs = await Promise.all(
+            files.map(async (file) => {
+              const u = await uploadImage(file.buffer);
+              return {
+                url: u.secure_url,
+                public_id: u.public_id,
+                alt: name,
+              };
+            })
+          );
+          // ensure variants[idx] exists
+          variants[idx] = variants[idx] || {};
+          variants[idx].images = (variants[idx].images || []).concat(uploadedImgs);
+        }
+      }
+    }
+
+    // CASE 2 → Already uploaded images passed from frontend
+    else if (images?.length > 0) {
       finalImages = images;
-    } else {
+    }
+
+    else {
       return res.status(400).json({
         success: false,
         message: "At least one product image is required",
@@ -107,6 +176,9 @@ export const createProduct = async (req, res) => {
       });
     }
 
+    // ensure each variant has an images array (may have been populated above)
+    variants = variants.map((v) => ({ ...v, images: v.images || [] }));
+
     for (const v of variants) {
       if (!v.sku || v.price == null) {
         return res.status(400).json({
@@ -115,27 +187,28 @@ export const createProduct = async (req, res) => {
         });
       }
 
-      // Admin should NOT set stock initially
+      // Initial stock setup
       v.stockQuantity = 0;
       v.hasStock = false;
-
       if (!v.currency) v.currency = "INR";
     }
 
     /* ================= CREATE PRODUCT ================= */
     const product = await Product.create({
-      name,
+      name: name.trim(),
       slug,
-      productKey,
-      description,
+      productKey: productKey.trim(),
+      description: description.trim(),
       category,
+      subcategory: subcategory || null,
+      filterOptions: filterOptions || [],
       images: finalImages,
       specifications,
       keyFeatures,
-      brand,
+      brand: brand?.trim(),
       variants,
-      warranty,
-      returnPolicy,
+      warranty: warranty.trim(),
+      returnPolicy: returnPolicy.trim(),
       tags,
       keywords,
       isRecommended,
@@ -154,7 +227,7 @@ export const createProduct = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Create product error:", error);
+    console.error("Create Product Error:", error);
 
     if (error.code === 11000) {
       return res.status(400).json({
@@ -169,6 +242,7 @@ export const createProduct = async (req, res) => {
     });
   }
 };
+
 
 
 /* ================= GET ALL PRODUCTS ================= */
@@ -263,6 +337,19 @@ export const updateProduct = async (req, res) => {
       updateData.keywords = parseJSON(updateData.keywords);
 
     /* ================= SAFE VARIANT UPDATE ================= */
+    let variantFileMap = {};
+    if (req.files && req.files.length > 0) {
+      // collect any variant-specific uploaded files
+      req.files.forEach((file) => {
+        const match = file.fieldname.match(/^variantImage_(\d+)$/);
+        if (match) {
+          const idx = parseInt(match[1], 10);
+          variantFileMap[idx] = variantFileMap[idx] || [];
+          variantFileMap[idx].push(file);
+        }
+      });
+    }
+
     if (updateData.variants) {
       const newVariants = parseJSON(updateData.variants);
 
@@ -276,8 +363,29 @@ export const updateProduct = async (req, res) => {
           stockQuantity: existingVariant?.stockQuantity ?? 0,
           stockStatus: existingVariant?.stockStatus ?? "out-of-stock",
           hasStock: existingVariant?.hasStock ?? false,
+          images: newVariant.images || [],
         };
       });
+
+      // attach uploaded variant files to respective variant entries
+      for (const [idxStr, files] of Object.entries(variantFileMap)) {
+        const idx = parseInt(idxStr, 10);
+        const uploadedImgs = await Promise.all(
+          files.map(async (file) => {
+            const u = await uploadImage(file.buffer);
+            return {
+              url: u.secure_url,
+              public_id: u.public_id,
+              alt: "",
+            };
+          })
+        );
+        if (updateData.variants[idx]) {
+          updateData.variants[idx].images = (
+            updateData.variants[idx].images || []
+          ).concat(uploadedImgs);
+        }
+      }
     } else {
       // VERY IMPORTANT → don't touch variants if not provided
       delete updateData.variants;

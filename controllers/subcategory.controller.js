@@ -37,12 +37,13 @@ export const createSubcategory = async (req, res) => {
 export const getSubcategories = async (req, res) => {
   try {
     const { category } = req.query;
+    console.log(category)
     const filter = category ? { category, status: "active" } : { status: "active" };
-
+    console.log(filter)
     const subcategories = await Subcategory.find(filter)
       .populate("category", "categoryKey pageTitle")
       .sort({ displayOrder: 1 });
-
+    console.log(subcategories)
     return res.json({ success: true, count: subcategories.length, subcategories });
   } catch (error) {
     console.error("Get subcategories error:", error);
