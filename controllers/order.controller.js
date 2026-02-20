@@ -6,7 +6,7 @@ import Cart from "../models/cart.model.js";
 import Coupon from "../models/coupons.model.js";
 import orderModel from "../models/order.model.js";
 
-// ─── Get all orders (admin) ─────────────────────────────────────────
+
 export const getOrders = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
@@ -156,7 +156,7 @@ export const createOrder = async (req, res) => {
         return res.status(400).json({ success: false, message: "Coupon usage limit reached" });
 
       if (coupon.perCustomerLimit) {
-        const userOrdersWithCoupon = await Order.countDocuments({ user: userId, coupon: couponId }); // ✅ FIXED: userId → user
+        const userOrdersWithCoupon = await Order.countDocuments({ user: userId, coupon: couponId }); 
         if (userOrdersWithCoupon >= coupon.perCustomerLimit)
           return res.status(400).json({
             success: false,
@@ -165,7 +165,7 @@ export const createOrder = async (req, res) => {
       }
 
       if (coupon.firstPurchaseOnly) {
-        const previousOrders = await Order.countDocuments({ user: userId }); // ✅ FIXED: userId → user
+        const previousOrders = await Order.countDocuments({ user: userId }); 
         if (previousOrders > 0)
           return res.status(400).json({
             success: false,
