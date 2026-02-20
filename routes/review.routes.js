@@ -7,7 +7,7 @@ import {
   deleteReview,
   getReviewsByProductId
 } from "../controllers/review.controller.js";
-import { uploadReviewMedia } from "../utils/cloudinary.js";
+import { uploadReviewMedia } from "../config/cloudinary.js";
 
 const router = express.Router();
 

@@ -1,5 +1,6 @@
 import Subcategory from "../models/subcategory.model.js";
 import Category from "../models/category.model.js";
+import { uploadToCloud } from "../config/cloudinary.js";
 
 /* ================= CREATE SUBCATEGORY ================= */
 export const createSubcategory = async (req, res) => {
@@ -7,12 +8,26 @@ export const createSubcategory = async (req, res) => {
     const { name, slug, category, description, image } = req.body;
 
     if (!name || !slug || !category) {
-      return res.status(400).json({ success: false, message: "Missing required fields" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing required fields" });
     }
 
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
-      return res.status(404).json({ success: false, message: "Category not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Category not found" });
+    }
+
+    // ===== MAIN IMAGE =====
+    let imageUrl = "/images/placeholder.png";
+    const mainImage = req.files?.image?.[0];
+
+    if (mainImage) {
+      console.log("IMAGE RECEIVED:", mainImage.originalname);
+      const result = await uploadToCloud(mainImage.buffer, "subcategories");
+      imageUrl = result.secure_url;
     }
 
     const subcategory = await Subcategory.create({
@@ -20,14 +35,16 @@ export const createSubcategory = async (req, res) => {
       slug: slug.toLowerCase().trim(),
       category,
       description,
-      image,
+      image: imageUrl,
     });
 
     return res.status(201).json({ success: true, subcategory });
   } catch (error) {
     console.error("Create subcategory error:", error);
     if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: "Slug already exists" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Slug already exists" });
     }
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -37,14 +54,20 @@ export const createSubcategory = async (req, res) => {
 export const getSubcategories = async (req, res) => {
   try {
     const { category } = req.query;
-    console.log(category)
-    const filter = category ? { category, status: "active" } : { status: "active" };
-    console.log(filter)
+    console.log(category);
+    const filter = category
+      ? { category, status: "active" }
+      : { status: "active" };
+    console.log(filter);
     const subcategories = await Subcategory.find(filter)
       .populate("category", "categoryKey pageTitle")
       .sort({ displayOrder: 1 });
-    console.log(subcategories)
-    return res.json({ success: true, count: subcategories.length, subcategories });
+    console.log(subcategories);
+    return res.json({
+      success: true,
+      count: subcategories.length,
+      subcategories,
+    });
   } catch (error) {
     console.error("Get subcategories error:", error);
     return res.status(500).json({ success: false, message: error.message });
@@ -54,11 +77,15 @@ export const getSubcategories = async (req, res) => {
 /* ================= GET SUBCATEGORY BY ID ================= */
 export const getSubcategoryById = async (req, res) => {
   try {
-    const subcategory = await Subcategory.findById(req.params.id)
-      .populate("category", "categoryKey pageTitle");
+    const subcategory = await Subcategory.findById(req.params.id).populate(
+      "category",
+      "categoryKey pageTitle",
+    );
 
     if (!subcategory) {
-      return res.status(404).json({ success: false, message: "Subcategory not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Subcategory not found" });
     }
 
     return res.json({ success: true, subcategory });
@@ -71,6 +98,7 @@ export const getSubcategoryById = async (req, res) => {
 /* ================= UPDATE SUBCATEGORY ================= */
 export const updateSubcategory = async (req, res) => {
   try {
+    console.log("i am called")
     const { id } = req.params;
     const updateData = {};
 
@@ -79,25 +107,43 @@ export const updateSubcategory = async (req, res) => {
     if (req.body.slug) updateData.slug = req.body.slug.toLowerCase().trim();
     if (req.body.category) updateData.category = req.body.category;
     if (req.body.description) updateData.description = req.body.description;
-    if (req.body.image) updateData.image = req.body.image;
     if (req.body.status) updateData.status = req.body.status;
-    if (req.body.displayOrder !== undefined) updateData.displayOrder = req.body.displayOrder;
+    if (req.body.displayOrder !== undefined)
+      updateData.displayOrder = req.body.displayOrder;
 
-    const subcategory = await Subcategory.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate("category", "categoryKey pageTitle");
-
-    if (!subcategory) {
-      return res.status(404).json({ success: false, message: "Subcategory not found" });
+    // ===== MAIN IMAGE =====
+    const mainImage = req.files?.image?.[0];
+    if (mainImage) {
+      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
+      const result = await uploadToCloud(mainImage.buffer, "subcategories");
+      updateData.image = result.secure_url;
     }
 
-    return res.json({ success: true, message: "Subcategory updated", subcategory });
+    console.log("update",updateData)
+
+    const subcategory = await Subcategory.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).populate("category", "categoryKey pageTitle");
+
+    if (!subcategory) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Subcategory not found" });
+    }
+    console.log(subcategory)
+
+    return res.json({
+      success: true,
+      message: "Subcategory updated",
+      subcategory,
+    });
   } catch (error) {
     console.error("Update subcategory error:", error);
     if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: "Slug already exists" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Slug already exists" });
     }
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -109,7 +155,9 @@ export const deleteSubcategory = async (req, res) => {
     const subcategory = await Subcategory.findByIdAndDelete(req.params.id);
 
     if (!subcategory) {
-      return res.status(404).json({ success: false, message: "Subcategory not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Subcategory not found" });
     }
 
     return res.json({ success: true, message: "Subcategory deleted" });

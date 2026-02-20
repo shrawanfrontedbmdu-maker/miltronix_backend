@@ -66,7 +66,7 @@ const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true },
-    productKey: { type: String, required: true, unique: true, trim: true },
+    productKey: { type: String, unique: true, trim: true },
     description: { type: String, required: true, trim: true },
 
     category: {

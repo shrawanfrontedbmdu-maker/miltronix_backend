@@ -18,10 +18,11 @@ const checkForFlaggedKeywords = (text) => {
 
 export const createReview = async (req, res) => {
   try {
-    const { product, reviewText, rating, name, email } = req.body;
+    const id = req.user._id;
+    const { product, reviewText, rating } = req.body;
 
     // FIX: Add the 'product' field to the validation check for completeness.
-    if (!product || !reviewText || !rating || !name || !email) {
+    if (!product || !reviewText || !rating) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
@@ -31,6 +32,7 @@ export const createReview = async (req, res) => {
 
     const newReview = new Review({
       product,
+      customer:id,
       reviewText,
       rating,
       flaggedKeywords: keywords,

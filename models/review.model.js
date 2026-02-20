@@ -6,6 +6,11 @@ const ReviewSchema = new mongoose.Schema({
     ref: "Product",
     required: true,
   },
+  customer:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
   reviewText: {
     type: String,
     required: true,
@@ -55,14 +60,6 @@ const ReviewSchema = new mongoose.Schema({
       },
     },
   ],
-  name: {
-    type: String,
-    required: true,
-  },
-  email: {
-    type: String,
-    required: true,
-  }
 });
 
 export default mongoose.model("Review", ReviewSchema);

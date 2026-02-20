@@ -6,11 +6,14 @@ import {
   updateSubcategory,
   deleteSubcategory,
 } from "../controllers/subcategory.controller.js";
+import upload from "../middlewares/multer.js";
 
 const router = express.Router();
 
 /* ================= CREATE SUBCATEGORY ================= */
-router.post("/", createSubcategory);
+router.post("/",
+  upload.fields([{ name: "image", maxCount: 1 }]), 
+  createSubcategory);
 
 /* ================= GET ALL SUBCATEGORIES (with optional category filter) ================= */
 router.get("/", getSubcategories);
@@ -19,7 +22,9 @@ router.get("/", getSubcategories);
 router.get("/:id", getSubcategoryById);
 
 /* ================= UPDATE SUBCATEGORY ================= */
-router.put("/:id", updateSubcategory);
+router.put("/:id", 
+  upload.fields([{ name: "image", maxCount: 1 }]), 
+  updateSubcategory);
 
 /* ================= DELETE SUBCATEGORY ================= */
 router.delete("/:id", deleteSubcategory);

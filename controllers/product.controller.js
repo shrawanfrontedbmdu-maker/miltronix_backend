@@ -92,7 +92,10 @@ if (!slug && name) slug = generateSlug(name);
 
     /* ================= FILTER CHECK ================= */
     if (filterOptions?.length > 0) {
-      const validFilters = await filterOptions.find({
+      // the variable `filterOptions` is an array from req.body – we need to query the
+      // FilterOption model, not call `find` on the array itself (which triggers
+      // Array.find and throws when passed an object).
+      const validFilters = await FilterOption.find({
         _id: { $in: filterOptions },
       });
 

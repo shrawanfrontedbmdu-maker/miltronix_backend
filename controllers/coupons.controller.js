@@ -120,84 +120,6 @@ export const getCouponById = async (req, res) => {
   }
 };
 
-// export const updateCoupon = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const updates = { ...req.body };
-
-//     const existingCoupon = await Coupon.findById(id);
-//     if (!existingCoupon) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Coupon not found"
-//       });
-//     }
-
-//     if (updates.code) {
-//       updates.code = updates.code.toUpperCase().trim();
-
-//       const duplicate = await Coupon.findOne({
-//         code: updates.code,
-//         _id: { $ne: id }
-//       });
-
-//       if (duplicate) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Coupon code already exists"
-//         });
-//       }
-//     }
-
-//     const startDate = updates.startDate ? new Date(updates.startDate) : existingCoupon.startDate;
-//     const expiryDate = updates.expiryDate ? new Date(updates.expiryDate) : existingCoupon.expiryDate;
-
-//     if (startDate >= expiryDate) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Expiry date must be after start date"
-//       });
-//     }
-
-//     const discountType = updates.discountType || existingCoupon.discountType;
-//     const discountValue = updates.discountValue ?? existingCoupon.discountValue;
-
-//     if (discountType === "percentage" && discountValue > 100) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Percentage discount cannot be more than 100%"
-//       });
-//     }
-
-//     if (discountType !== "percentage") {
-//       updates.maxDiscount = null;
-//     }
-
-//     if (updates.title) updates.title = updates.title.trim();
-
-//     const updatedCoupon = await Coupon.findByIdAndUpdate(
-//       id,
-//       updates,
-//       {
-//         new: true,
-//         runValidators: true
-//       }
-//     );
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Coupon updated successfully",
-//       data: updatedCoupon
-//     });
-
-//   } catch (error) {
-//     console.error("Update Coupon Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error while updating coupon"
-//     });
-//   }
-// };
 
 export const updateCoupon = async (req, res) => {
   try {
@@ -355,7 +277,7 @@ export const applyCoupon = async (req, res) => {
   try {
     const { code, orderAmount } = req.body;
 
-    const coupon = await Coupon.findOne({ code, status: "ACTIVE" });
+    const coupon = await Coupon.findOne({ code, status: "active" });
     if (!coupon) {
       return res
         .status(404)
@@ -383,12 +305,12 @@ export const applyCoupon = async (req, res) => {
     }
 
     let discount = 0;
-    if (coupon.discountType === "PERCENTAGE") {
+    if (coupon.discountType === "percentage") {
       discount = (orderAmount * coupon.discountValue) / 100;
       if (coupon.maxDiscount && discount > coupon.maxDiscount) {
         discount = coupon.maxDiscount;
       }
-    } else if (coupon.discountType === "FLAT") {
+    } else if (coupon.discountType === "flat") {
       discount = coupon.discountValue;
     }
 
@@ -410,7 +332,7 @@ export const applyCoupon = async (req, res) => {
 export const getApplicableCoupons = async (req, res) => {
     try {
         const { totalPrice } = req.body;
-
+        console.log(req.body)
         if (typeof totalPrice !== 'number' || totalPrice <= 0) {
             return res.status(400).json({ 
                 success: false, 
@@ -425,8 +347,8 @@ export const getApplicableCoupons = async (req, res) => {
             // 1. Initial Filtering (similar to the find() query)
             {
                 $match: {
-                    status: "ACTIVE",
-                    visibility: "PUBLIC",
+                    status: "active",
+                    visibility: "public",
                     startDate: { $lte: currentDate },
                     expiryDate: { $gt: currentDate },
                     minOrderValue: { $lte: totalPrice },
@@ -444,14 +366,15 @@ export const getApplicableCoupons = async (req, res) => {
                 }
             }
         ];
+        console.log(pipeline)
 
         const coupons = await Coupon.aggregate(pipeline);
-
+        console.log(coupons)
         // 3. Discount Calculation (JavaScript Logic remains the same)
         const calculatedCoupons = coupons.map(coupon => {
             let effectiveDiscount = 0;
             
-            if (coupon.discountType === "PERCENTAGE") {
+            if (coupon.discountType === "percentage") {
                 let calculatedValue = (coupon.discountValue / 100) * totalPrice;
                 
                 if (coupon.maxDiscount !== null && coupon.maxDiscount !== undefined) {
@@ -459,7 +382,7 @@ export const getApplicableCoupons = async (req, res) => {
                 } else {
                     effectiveDiscount = calculatedValue;
                 }
-            } else if (coupon.discountType === "FLAT") {
+            } else if (coupon.discountType === "flat") {
                 effectiveDiscount = coupon.discountValue;
             }
 
