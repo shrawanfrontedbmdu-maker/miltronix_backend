@@ -17,18 +17,18 @@ const variantSchema = new mongoose.Schema(
       default: false,
     },
 
-    stockQuantity: { type: Number, required: true, min: 0 },
+    stockQuantity: { type: Number, min: 0, default: 0 },
     stockStatus: {
       type: String,
       enum: ["in-stock", "low-stock", "out-of-stock"],
-      default: "low-stock",
+      default: "out-of-stock",
     },
     // dimensions & shipping metadata
     dimensions: {
-      weight: { type: Number, min: 0 },
-      length: { type: Number, min: 0 },
-      width: { type: Number, min: 0 },
-      height: { type: Number, min: 0 },
+      weight: { type: Number, min: 0,default: 0 },
+      length: { type: Number, min: 0 ,default: 0},
+      width: { type: Number, min: 0 ,default: 0},
+      height: { type: Number, min: 0,default: 0 },
       unit: { type: String, default: "cm" },
     },
     attributes: {
@@ -38,8 +38,8 @@ const variantSchema = new mongoose.Schema(
     },
     images: [
       {
-        url: { type: String, required: true },
-        public_id: { type: String, required: true },
+        url: { type: String },
+        public_id: { type: String },
         alt: { type: String, trim: true },
       },
     ],

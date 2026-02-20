@@ -1,5 +1,6 @@
 import Review from "../models/review.model.js";
 import flaggedKeywords from "../utils/flaggedKeywordsList.js";
+import { uploadToCloud } from "../config/cloudinary.js";
 
 const checkForFlaggedKeywords = (text) => {
   if (!text || typeof text !== 'string') {
@@ -21,25 +22,52 @@ export const createReview = async (req, res) => {
     const id = req.user._id;
     const { product, reviewText, rating } = req.body;
 
-    // FIX: Add the 'product' field to the validation check for completeness.
     if (!product || !reviewText || !rating) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
     const keywords = checkForFlaggedKeywords(reviewText);
-    const images = req.files?.images ? req.files.images.map((file) => ({ url: file.path })) : [];
-    const videos = req.files?.videos ? req.files.videos.map((file) => ({ url: file.path })) : [];
+
+    // Upload images to Cloudinary
+    let images = [];
+    if (req.files?.images && Array.isArray(req.files.images)) {
+      for (const file of req.files.images) {
+        try {
+          const result = await uploadToCloud(file.buffer, "review-images");
+          images.push({
+            url: result.secure_url,
+            public_id: result.public_id,
+          });
+        } catch (err) {
+          console.error("Error uploading image to Cloudinary:", err);
+        }
+      }
+    }
+
+    // Upload videos to Cloudinary
+    let videos = [];
+    if (req.files?.videos && Array.isArray(req.files.videos)) {
+      for (const file of req.files.videos) {
+        try {
+          const result = await uploadToCloud(file.buffer, "review-videos");
+          videos.push({
+            url: result.secure_url,
+            public_id: result.public_id,
+          });
+        } catch (err) {
+          console.error("Error uploading video to Cloudinary:", err);
+        }
+      }
+    }
 
     const newReview = new Review({
       product,
-      customer:id,
+      customer: id,
       reviewText,
       rating,
       flaggedKeywords: keywords,
       images,
       videos,
-      name,
-      email
     });
 
     const review = await newReview.save();
@@ -141,7 +169,7 @@ export const getReviewsByProductId = async (req, res) => {
     }
 
     // Fetch all reviews for this product
-    const reviews = await Review.find({ product: productId }).sort({ createdAt: -1 });
+    const reviews = await Review.find({ product: productId }).populate("customer", "fullName email").sort({ createdAt: -1 });
 
     // Calculate average rating
     let averageRating = 0;

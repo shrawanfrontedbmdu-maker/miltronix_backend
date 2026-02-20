@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
 import multer from 'multer';
+import streamifier from 'streamifier';
 
 dotenv.config();
 
@@ -26,6 +27,11 @@ export const uploadToCloud = (fileBuffer, folder) => {
 const cloudinaryStorage = (folder, resource_type = "image") => {
   return {
     _handleFile(req, file, cb) {
+      // Guard: ensure file has buffer
+      if (!file.buffer) {
+        return cb(new Error("File buffer is missing"));
+      }
+
       const stream = cloudinary.uploader.upload_stream(
         { folder, resource_type, public_id: `${folder}-${Date.now()}` },
         (error, result) => {
@@ -45,7 +51,18 @@ const cloudinaryStorage = (folder, resource_type = "image") => {
 };
 
 export const uploadReviewMedia = multer({
-  storage: cloudinaryStorage("review-media", "auto"),
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    // Accept 'images' and 'videos' fields
+    if (file.fieldname === "images" || file.fieldname === "videos") {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unexpected field: ${file.fieldname}`));
+    }
+  },
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB per file
+  },
 });
 
 export default cloudinary;

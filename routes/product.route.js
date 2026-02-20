@@ -17,7 +17,7 @@ const router = express.Router();
 /* ================= CREATE PRODUCT ================= */
 router.post(
   "/",
-  upload.array("images", 6),
+  upload.any(),
   createProduct
 );
 
@@ -38,7 +38,7 @@ router.get("/:id", getProductById);
 /* ================= UPDATE PRODUCT ================= */
 router.put(
   "/:id",
-  upload.array("images", 6),
+  upload.any(),
   updateProduct
 );
 

@@ -8,6 +8,7 @@ import {
   getReviewsByProductId
 } from "../controllers/review.controller.js";
 import { uploadReviewMedia } from "../config/cloudinary.js";
+import authMiddleware from "../middlewares/auth.js";
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.post(
     { name: "images", maxCount: 5 },
     { name: "videos", maxCount: 2 },
   ]),
+  authMiddleware,
   createReview
 );
 router.get("/", getAllReviews);
