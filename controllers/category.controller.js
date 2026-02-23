@@ -3,6 +3,13 @@ import { uploadToCloud } from "../config/cloudinary.js";
 
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
+   console.log("FILES:", req.files);        // ← kitni files aa rahi hain
+  console.log("BODY:", req.body);          // ← featuresTitle etc aa raha hai
+  console.log("CLOUDINARY CONFIG:", {
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY ? "SET" : "NOT SET",  // ← check
+    api_secret: process.env.CLOUDINARY_API_SECRET ? "SET" : "NOT SET",
+  });
   console.log("FILES:", req.files);
   console.log("BODY:", req.body);
 
