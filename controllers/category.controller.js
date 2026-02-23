@@ -28,8 +28,9 @@ export const createCategory = async (req, res) => {
 
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
-    const mainImage = req.files?.image?.[0];
+    const mainImage = req.files?.find((f) => f.fieldname === "image");
     if (mainImage) {
+      console.log("IMAGE RECEIVED:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
@@ -41,7 +42,7 @@ export const createCategory = async (req, res) => {
       images: [],
     };
 
-    const featureImageFiles = req.files?.featureImages || [];
+    const featureImageFiles = req.files?.filter((f) => f.fieldname === "featureImages") || [];
     if (featureImageFiles.length > 0) {
       features.images = await Promise.all(
         featureImageFiles.map((file) =>
@@ -103,8 +104,9 @@ export const updateCategory = async (req, res) => {
     }
 
     // ===== MAIN IMAGE =====
-    const mainImage = req.files?.image?.[0];
+    const mainImage = req.files?.find((f) => f.fieldname === "image");
     if (mainImage) {
+      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
@@ -112,15 +114,13 @@ export const updateCategory = async (req, res) => {
     // ===== FEATURES =====
     const existingFeatures = category.features || {};
 
-    // existing images jo frontend ne bheje (remove nahi ki)
     const existingImages = req.body.existingFeatureImages
       ? Array.isArray(req.body.existingFeatureImages)
         ? req.body.existingFeatureImages
         : [req.body.existingFeatureImages]
       : existingFeatures.images || [];
 
-    // new images upload
-    const featureImageFiles = req.files?.featureImages || [];
+    const featureImageFiles = req.files?.filter((f) => f.fieldname === "featureImages") || [];
     const uploadedImages = await Promise.all(
       featureImageFiles.map((file) =>
         uploadToCloud(file.buffer, "categories/features").then((r) => r.secure_url)
@@ -132,6 +132,12 @@ export const updateCategory = async (req, res) => {
       description: req.body.featuresDescription ?? existingFeatures.description ?? "",
       images: [...existingImages, ...uploadedImages],
     };
+
+    // featuresTitle aur featuresDescription ko updateData se hata do
+    // warna mongoose mein unknown field jayega
+    delete updateData.featuresTitle;
+    delete updateData.featuresDescription;
+    delete updateData.existingFeatureImages;
 
     const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(updated);
