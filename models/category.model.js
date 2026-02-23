@@ -28,6 +28,19 @@ const categorySchema = new mongoose.Schema(
       default: "/images/placeholder.png",
     },
 
+    // ✅ NEW FIELD FOR FEATURE SECTION DESCRIPTION
+    featureDescription: {
+      type: String,
+    },
+
+    // ✅ FEATURES ARRAY
+    features: [
+      {
+        title: { type: String },
+        icon: { type: String },
+      },
+    ],
+
     // ✅ STATUS FIELD
     status: {
       type: String,

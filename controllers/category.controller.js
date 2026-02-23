@@ -3,15 +3,14 @@ import { uploadToCloud } from "../config/cloudinary.js";
 
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
-  console.log("FILES:", req.files);
-  console.log("BODY:", req.body);
-
   try {
     const {
       categoryKey,
       pageTitle,
       pageSubtitle = "",
       description = "",
+      featureDescription = "",
+      features = [],
       status = "active",
     } = req.body;
 
@@ -21,7 +20,6 @@ export const createCategory = async (req, res) => {
         .json({ message: "categoryKey & pageTitle required" });
     }
 
-    // validate status
     if (!["active", "inactive"].includes(status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }
@@ -29,6 +27,7 @@ export const createCategory = async (req, res) => {
     const exists = await Category.findOne({
       categoryKey: categoryKey.toLowerCase(),
     });
+
     if (exists)
       return res.status(400).json({ message: "Category already exists" });
 
@@ -37,7 +36,6 @@ export const createCategory = async (req, res) => {
     const mainImage = req.files?.image?.[0];
 
     if (mainImage) {
-      console.log("IMAGE RECEIVED:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
@@ -47,6 +45,8 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle,
       description,
+      featureDescription,
+      features,
       image: imageUrl,
       status,
     });
@@ -92,7 +92,6 @@ export const updateCategory = async (req, res) => {
 
     const updateData = { ...req.body };
 
-    // validate status
     if (
       updateData.status &&
       !["active", "inactive"].includes(updateData.status)
@@ -100,10 +99,8 @@ export const updateCategory = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    // ===== MAIN IMAGE =====
     const mainImage = req.files?.image?.[0];
     if (mainImage) {
-      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
@@ -125,11 +122,17 @@ export const updateCategory = async (req, res) => {
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
+
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
+    // 👇 Agar aap future me products ko category se link karte ho
+    // to yaha unhe bhi delete kar sakte ho
+    // await Product.deleteMany({ category: category._id });
+
     await category.deleteOne();
-    res.json({ message: "Deleted successfully" });
+
+    res.json({ message: "Category and related data deleted successfully" });
   } catch (err) {
     console.error("Delete Category Error:", err);
     res.status(500).json({ message: err.message });
