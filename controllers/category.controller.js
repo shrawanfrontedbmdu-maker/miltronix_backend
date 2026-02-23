@@ -3,13 +3,6 @@ import { uploadToCloud } from "../config/cloudinary.js";
 
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
-   console.log("FILES:", req.files);        // ← kitni files aa rahi hain
-  console.log("BODY:", req.body);          // ← featuresTitle etc aa raha hai
-  console.log("CLOUDINARY CONFIG:", {
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY ? "SET" : "NOT SET",  // ← check
-    api_secret: process.env.CLOUDINARY_API_SECRET ? "SET" : "NOT SET",
-  });
   console.log("FILES:", req.files);
   console.log("BODY:", req.body);
 
@@ -35,7 +28,9 @@ export const createCategory = async (req, res) => {
 
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
-    const mainImage = req.files?.find((f) => f.fieldname === "image");
+    const filesArray = Array.isArray(req.files) ? req.files : [];
+
+    const mainImage = filesArray.find((f) => f.fieldname === "image");
     if (mainImage) {
       console.log("IMAGE RECEIVED:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
@@ -49,7 +44,7 @@ export const createCategory = async (req, res) => {
       images: [],
     };
 
-    const featureImageFiles = req.files?.filter((f) => f.fieldname === "featureImages") || [];
+    const featureImageFiles = filesArray.filter((f) => f.fieldname === "featureImages");
     if (featureImageFiles.length > 0) {
       features.images = await Promise.all(
         featureImageFiles.map((file) =>
@@ -98,12 +93,12 @@ export const getCategoryById = async (req, res) => {
   }
 };
 
+// ================= UPDATE CATEGORY =================
 export const updateCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
 
-    // ✅ Sirf valid fields lo — spread mat karo req.body
     const updateData = {
       categoryKey: req.body.categoryKey || category.categoryKey,
       pageTitle: req.body.pageTitle || category.pageTitle,
@@ -117,8 +112,11 @@ export const updateCategory = async (req, res) => {
     }
 
     // ===== MAIN IMAGE =====
-    const mainImage = req.files?.find((f) => f.fieldname === "image");
+    const filesArray = Array.isArray(req.files) ? req.files : [];
+
+    const mainImage = filesArray.find((f) => f.fieldname === "image");
     if (mainImage) {
+      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
@@ -132,8 +130,8 @@ export const updateCategory = async (req, res) => {
         : [req.body.existingFeatureImages]
       : existingFeatures.images || [];
 
-    const featureImageFiles = req.files?.filter((f) => f.fieldname === "featureImages") || [];
-    
+    const featureImageFiles = filesArray.filter((f) => f.fieldname === "featureImages");
+
     const uploadedImages = await Promise.all(
       featureImageFiles.map((file) =>
         uploadToCloud(file.buffer, "categories/features").then((r) => r.secure_url)
