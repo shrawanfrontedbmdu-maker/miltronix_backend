@@ -95,6 +95,10 @@ export const getCategoryById = async (req, res) => {
 
 // ================= UPDATE CATEGORY =================
 export const updateCategory = async (req, res) => {
+   console.log("REQ FILES TYPE:", typeof req.files);
+  console.log("REQ FILES IS ARRAY:", Array.isArray(req.files));
+  console.log("REQ FILES:", req.files);
+  console.log("REQ BODY:", req.body);
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
