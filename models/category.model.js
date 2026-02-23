@@ -1,16 +1,5 @@
 import mongoose from "mongoose";
 
-const featureSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-  },
-  icon: {
-    type: String, // Cloudinary image URL
-    required: true,
-  },
-});
-
 const categorySchema = new mongoose.Schema(
   {
     categoryKey: {
@@ -39,18 +28,22 @@ const categorySchema = new mongoose.Schema(
       default: "/images/placeholder.png",
     },
 
-    // 🔥 FEATURE SECTION (Image jaisa structure)
-    featuresSection: {
-      title: {
-        type: String, // Example: "QLED Features"
+    // ✅ FEATURES FIELD
+    features: [
+      {
+        title: {
+          type: String,
+          required: true,
+        },
+        description: {
+          type: String,
+        },
+        image: {
+          type: String,
+          default: "/images/placeholder.png",
+        },
       },
-      description: {
-        type: String, // Paragraph text
-      },
-    },
-
-    // 🔥 FEATURE ICONS ARRAY
-    features: [featureSchema],
+    ],
 
     // ✅ STATUS FIELD
     status: {

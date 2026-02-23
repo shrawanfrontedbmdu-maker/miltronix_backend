@@ -12,8 +12,6 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle = "",
       description = "",
-      sectionTitle,
-      sectionDescription,
       status = "active",
     } = req.body;
 
@@ -23,6 +21,7 @@ export const createCategory = async (req, res) => {
         .json({ message: "categoryKey & pageTitle required" });
     }
 
+    // validate status
     if (!["active", "inactive"].includes(status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }
@@ -30,7 +29,6 @@ export const createCategory = async (req, res) => {
     const exists = await Category.findOne({
       categoryKey: categoryKey.toLowerCase(),
     });
-
     if (exists)
       return res.status(400).json({ message: "Category already exists" });
 
@@ -39,27 +37,39 @@ export const createCategory = async (req, res) => {
     const mainImage = req.files?.image?.[0];
 
     if (mainImage) {
+      console.log("IMAGE RECEIVED:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
 
-    // ===== FEATURE ICONS =====
-    let featuresData = [];
-    const featureIcons = req.files?.featureIcons || [];
-    const featureTitles = req.body.featureTitles || [];
+    // ===== FEATURES =====
+    let features = [];
+    if (req.body.features) {
+      const parsedFeatures =
+        typeof req.body.features === "string"
+          ? JSON.parse(req.body.features)
+          : req.body.features;
 
-    for (let i = 0; i < featureIcons.length; i++) {
-      const result = await uploadToCloud(
-        featureIcons[i].buffer,
-        "categories/features"
+      features = await Promise.all(
+        parsedFeatures.map(async (feature, index) => {
+          let featureImageUrl = "/images/placeholder.png";
+          const featureImage = req.files?.[`featureImage_${index}`]?.[0];
+
+          if (featureImage) {
+            const result = await uploadToCloud(
+              featureImage.buffer,
+              "categories/features"
+            );
+            featureImageUrl = result.secure_url;
+          }
+
+          return {
+            title: feature.title,
+            description: feature.description || "",
+            image: featureImageUrl,
+          };
+        })
       );
-
-      featuresData.push({
-        title: Array.isArray(featureTitles)
-          ? featureTitles[i]
-          : featureTitles,
-        icon: result.secure_url,
-      });
     }
 
     const category = await Category.create({
@@ -68,17 +78,38 @@ export const createCategory = async (req, res) => {
       pageSubtitle,
       description,
       image: imageUrl,
-      featuresSection: {
-        title: sectionTitle,
-        description: sectionDescription,
-      },
-      features: featuresData,
+      features,
       status,
     });
 
     res.status(201).json(category);
   } catch (err) {
     console.error("Create Category Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ================= GET ALL =================
+export const getCategories = async (req, res) => {
+  try {
+    const categories = await Category.find().sort({ createdAt: -1 });
+    res.json(categories);
+  } catch (err) {
+    console.error("Get Categories Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ================= GET BY ID =================
+export const getCategoryById = async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    if (!category)
+      return res.status(404).json({ message: "Category not found" });
+
+    res.json(category);
+  } catch (err) {
+    console.error("Get Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -92,6 +123,7 @@ export const updateCategory = async (req, res) => {
 
     const updateData = { ...req.body };
 
+    // validate status
     if (
       updateData.status &&
       !["active", "inactive"].includes(updateData.status)
@@ -99,35 +131,41 @@ export const updateCategory = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    // ===== MAIN IMAGE UPDATE =====
+    // ===== MAIN IMAGE =====
     const mainImage = req.files?.image?.[0];
     if (mainImage) {
+      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
 
-    // ===== FEATURE ICON UPDATE =====
-    const featureIcons = req.files?.featureIcons || [];
-    const featureTitles = req.body.featureTitles || [];
+    // ===== FEATURES =====
+    if (req.body.features) {
+      const parsedFeatures =
+        typeof req.body.features === "string"
+          ? JSON.parse(req.body.features)
+          : req.body.features;
 
-    if (featureIcons.length > 0) {
-      let featuresData = [];
+      updateData.features = await Promise.all(
+        parsedFeatures.map(async (feature, index) => {
+          let featureImageUrl = feature.image || "/images/placeholder.png";
+          const featureImage = req.files?.[`featureImage_${index}`]?.[0];
 
-      for (let i = 0; i < featureIcons.length; i++) {
-        const result = await uploadToCloud(
-          featureIcons[i].buffer,
-          "categories/features"
-        );
+          if (featureImage) {
+            const result = await uploadToCloud(
+              featureImage.buffer,
+              "categories/features"
+            );
+            featureImageUrl = result.secure_url;
+          }
 
-        featuresData.push({
-          title: Array.isArray(featureTitles)
-            ? featureTitles[i]
-            : featureTitles,
-          icon: result.secure_url,
-        });
-      }
-
-      updateData.features = featuresData;
+          return {
+            title: feature.title,
+            description: feature.description || "",
+            image: featureImageUrl,
+          };
+        })
+      );
     }
 
     const updated = await Category.findByIdAndUpdate(
@@ -143,30 +181,7 @@ export const updateCategory = async (req, res) => {
   }
 };
 
-// ================= GET ALL =================
-export const getCategories = async (req, res) => {
-  try {
-    const categories = await Category.find().sort({ createdAt: -1 });
-    res.json(categories);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ================= GET BY ID =================
-export const getCategoryById = async (req, res) => {
-  try {
-    const category = await Category.findById(req.params.id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
-    res.json(category);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ================= DELETE =================
+// ================= DELETE CATEGORY =================
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
@@ -174,9 +189,9 @@ export const deleteCategory = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
 
     await category.deleteOne();
-
     res.json({ message: "Deleted successfully" });
   } catch (err) {
+    console.error("Delete Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
