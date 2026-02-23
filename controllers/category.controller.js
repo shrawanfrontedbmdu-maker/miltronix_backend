@@ -60,57 +60,76 @@ export const createCategory = async (req, res) => {
 // ================= UPDATE CATEGORY =================
 export const updateCategory = async (req, res) => {
   try {
+    console.log("REQ FILES:", req.files);
+    console.log("REQ BODY:", req.body);
+
+    // 1️⃣ Fetch category
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
 
+    // 2️⃣ Prepare update data
     const updateData = {
       categoryKey: req.body.categoryKey?.toLowerCase() || category.categoryKey,
       pageTitle: req.body.pageTitle || category.pageTitle,
       pageSubtitle: req.body.pageSubtitle ?? category.pageSubtitle,
       description: req.body.description ?? category.description,
-      status: ["active", "inactive"].includes(req.body.status) ? req.body.status : category.status,
+      status: req.body.status || category.status,
     };
 
-    const filesArray = Array.isArray(req.files) ? req.files : [];
+    // Validate status
+    if (!["active", "inactive"].includes(updateData.status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
 
-    // ===== MAIN IMAGE =====
-    const mainImage = filesArray.find(f => f.fieldname === "image");
+    // 3️⃣ Handle main image
+    const filesArray = Array.isArray(req.files) ? req.files : [];
+    const mainImage = filesArray.find((f) => f.fieldname === "image");
+
     if (mainImage) {
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
 
-    // ===== FEATURES =====
+    // 4️⃣ Handle feature images
     const existingFeatures = category.features || {};
-    
-    // Existing images from frontend (can be single string or array)
-    const existingImages = req.body.existingFeatureImages
-      ? Array.isArray(req.body.existingFeatureImages)
-        ? req.body.existingFeatureImages
-        : [req.body.existingFeatureImages]
-      : existingFeatures.images || [];
 
-    // New uploaded feature images
+    // Safely convert existingFeatureImages from body to array
+    let existingImages = [];
+    if (req.body.existingFeatureImages) {
+      if (Array.isArray(req.body.existingFeatureImages)) {
+        existingImages = req.body.existingFeatureImages;
+      } else if (typeof req.body.existingFeatureImages === "string") {
+        existingImages = [req.body.existingFeatureImages];
+      }
+    } else if (existingFeatures.images) {
+      existingImages = existingFeatures.images;
+    }
+
+    // Upload new feature images if any
     const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages");
-    let newImages = [];
+    let uploadedImages = [];
     if (featureImageFiles.length > 0) {
-      newImages = await Promise.all(
-        featureImageFiles.map(file => uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url))
+      uploadedImages = await Promise.all(
+        featureImageFiles.map(file =>
+          uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url)
+        )
       );
     }
 
+    // Merge existing + new feature images
     updateData.features = {
       title: req.body.featuresTitle ?? existingFeatures.title ?? "",
       description: req.body.featuresDescription ?? existingFeatures.description ?? "",
-      images: [...existingImages, ...newImages],
+      images: [...existingImages, ...uploadedImages],
     };
 
+    // 5️⃣ Update category
     const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    res.json(updated);
 
+    res.json(updated);
   } catch (err) {
     console.error("Update Category Error:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: err.message || "Internal server error" });
   }
 };
 
