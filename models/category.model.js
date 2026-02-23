@@ -28,20 +28,25 @@ const categorySchema = new mongoose.Schema(
       default: "/images/placeholder.png",
     },
 
-    // ✅ NEW FIELD FOR FEATURE SECTION DESCRIPTION
+    // ✅ Feature Section Description
     featureDescription: {
       type: String,
     },
 
-    // ✅ FEATURES ARRAY
+    // ✅ FEATURES ARRAY (Icon = Uploaded Image URL)
     features: [
       {
-        title: { type: String },
-        icon: { type: String },
+        title: {
+          type: String,
+          required: true,
+        },
+        icon: {
+          type: String, // Cloudinary image URL
+          required: true,
+        },
       },
     ],
 
-    // ✅ STATUS FIELD
     status: {
       type: String,
       enum: ["active", "inactive"],

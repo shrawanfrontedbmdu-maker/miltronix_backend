@@ -10,7 +10,6 @@ export const createCategory = async (req, res) => {
       pageSubtitle = "",
       description = "",
       featureDescription = "",
-      features = [],
       status = "active",
     } = req.body;
 
@@ -40,13 +39,33 @@ export const createCategory = async (req, res) => {
       imageUrl = result.secure_url;
     }
 
+    // ===== FEATURE ICONS UPLOAD =====
+    let featuresData = [];
+
+    const featureIcons = req.files?.featureIcons || [];
+    const featureTitles = req.body.featureTitles || [];
+
+    for (let i = 0; i < featureIcons.length; i++) {
+      const result = await uploadToCloud(
+        featureIcons[i].buffer,
+        "categories/features"
+      );
+
+      featuresData.push({
+        title: Array.isArray(featureTitles)
+          ? featureTitles[i]
+          : featureTitles,
+        icon: result.secure_url,
+      });
+    }
+
     const category = await Category.create({
       categoryKey: categoryKey.toLowerCase(),
       pageTitle,
       pageSubtitle,
       description,
       featureDescription,
-      features,
+      features: featuresData,
       image: imageUrl,
       status,
     });
@@ -54,31 +73,6 @@ export const createCategory = async (req, res) => {
     res.status(201).json(category);
   } catch (err) {
     console.error("Create Category Error:", err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ================= GET ALL =================
-export const getCategories = async (req, res) => {
-  try {
-    const categories = await Category.find().sort({ createdAt: -1 });
-    res.json(categories);
-  } catch (err) {
-    console.error("Get Categories Error:", err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ================= GET BY ID =================
-export const getCategoryById = async (req, res) => {
-  try {
-    const category = await Category.findById(req.params.id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
-    res.json(category);
-  } catch (err) {
-    console.error("Get Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -99,10 +93,35 @@ export const updateCategory = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
+    // ===== MAIN IMAGE =====
     const mainImage = req.files?.image?.[0];
     if (mainImage) {
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
+    }
+
+    // ===== FEATURE ICON UPDATE =====
+    const featureIcons = req.files?.featureIcons || [];
+    const featureTitles = req.body.featureTitles || [];
+
+    if (featureIcons.length > 0) {
+      let featuresData = [];
+
+      for (let i = 0; i < featureIcons.length; i++) {
+        const result = await uploadToCloud(
+          featureIcons[i].buffer,
+          "categories/features"
+        );
+
+        featuresData.push({
+          title: Array.isArray(featureTitles)
+            ? featureTitles[i]
+            : featureTitles,
+          icon: result.secure_url,
+        });
+      }
+
+      updateData.features = featuresData;
     }
 
     const updated = await Category.findByIdAndUpdate(
@@ -118,23 +137,40 @@ export const updateCategory = async (req, res) => {
   }
 };
 
+// ================= GET ALL =================
+export const getCategories = async (req, res) => {
+  try {
+    const categories = await Category.find().sort({ createdAt: -1 });
+    res.json(categories);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ================= GET BY ID =================
+export const getCategoryById = async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    if (!category)
+      return res.status(404).json({ message: "Category not found" });
+
+    res.json(category);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // ================= DELETE CATEGORY =================
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-
     if (!category)
       return res.status(404).json({ message: "Category not found" });
 
-    // 👇 Agar aap future me products ko category se link karte ho
-    // to yaha unhe bhi delete kar sakte ho
-    // await Product.deleteMany({ category: category._id });
-
     await category.deleteOne();
 
-    res.json({ message: "Category and related data deleted successfully" });
+    res.json({ message: "Category deleted successfully" });
   } catch (err) {
-    console.error("Delete Category Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
