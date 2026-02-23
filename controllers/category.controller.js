@@ -3,13 +3,17 @@ import { uploadToCloud } from "../config/cloudinary.js";
 
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
+  console.log("FILES:", req.files);
+  console.log("BODY:", req.body);
+
   try {
     const {
       categoryKey,
       pageTitle,
       pageSubtitle = "",
       description = "",
-      featureDescription = "",
+      sectionTitle,
+      sectionDescription,
       status = "active",
     } = req.body;
 
@@ -39,9 +43,8 @@ export const createCategory = async (req, res) => {
       imageUrl = result.secure_url;
     }
 
-    // ===== FEATURE ICONS UPLOAD =====
+    // ===== FEATURE ICONS =====
     let featuresData = [];
-
     const featureIcons = req.files?.featureIcons || [];
     const featureTitles = req.body.featureTitles || [];
 
@@ -64,9 +67,12 @@ export const createCategory = async (req, res) => {
       pageTitle,
       pageSubtitle,
       description,
-      featureDescription,
-      features: featuresData,
       image: imageUrl,
+      featuresSection: {
+        title: sectionTitle,
+        description: sectionDescription,
+      },
+      features: featuresData,
       status,
     });
 
@@ -93,7 +99,7 @@ export const updateCategory = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    // ===== MAIN IMAGE =====
+    // ===== MAIN IMAGE UPDATE =====
     const mainImage = req.files?.image?.[0];
     if (mainImage) {
       const result = await uploadToCloud(mainImage.buffer, "categories");
@@ -160,7 +166,7 @@ export const getCategoryById = async (req, res) => {
   }
 };
 
-// ================= DELETE CATEGORY =================
+// ================= DELETE =================
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
@@ -169,7 +175,7 @@ export const deleteCategory = async (req, res) => {
 
     await category.deleteOne();
 
-    res.json({ message: "Category deleted successfully" });
+    res.json({ message: "Deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
