@@ -98,22 +98,27 @@ export const getCategoryById = async (req, res) => {
   }
 };
 
-// ================= UPDATE CATEGORY =================
 export const updateCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
 
-    const updateData = { ...req.body };
+    // ✅ Sirf valid fields lo — spread mat karo req.body
+    const updateData = {
+      categoryKey: req.body.categoryKey || category.categoryKey,
+      pageTitle: req.body.pageTitle || category.pageTitle,
+      pageSubtitle: req.body.pageSubtitle ?? category.pageSubtitle,
+      description: req.body.description ?? category.description,
+      status: req.body.status || category.status,
+    };
 
-    if (updateData.status && !["active", "inactive"].includes(updateData.status)) {
+    if (!["active", "inactive"].includes(updateData.status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
     // ===== MAIN IMAGE =====
     const mainImage = req.files?.find((f) => f.fieldname === "image");
     if (mainImage) {
-      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
@@ -128,6 +133,7 @@ export const updateCategory = async (req, res) => {
       : existingFeatures.images || [];
 
     const featureImageFiles = req.files?.filter((f) => f.fieldname === "featureImages") || [];
+    
     const uploadedImages = await Promise.all(
       featureImageFiles.map((file) =>
         uploadToCloud(file.buffer, "categories/features").then((r) => r.secure_url)
@@ -140,13 +146,12 @@ export const updateCategory = async (req, res) => {
       images: [...existingImages, ...uploadedImages],
     };
 
-    // featuresTitle aur featuresDescription ko updateData se hata do
-    // warna mongoose mein unknown field jayega
-    delete updateData.featuresTitle;
-    delete updateData.featuresDescription;
-    delete updateData.existingFeatureImages;
+    const updated = await Category.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
 
-    const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(updated);
   } catch (err) {
     console.error("Update Category Error:", err);
