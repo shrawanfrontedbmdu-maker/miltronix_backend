@@ -16,59 +16,37 @@ export const createCategory = async (req, res) => {
     } = req.body;
 
     if (!categoryKey || !pageTitle) {
-      return res
-        .status(400)
-        .json({ message: "categoryKey & pageTitle required" });
+      return res.status(400).json({ message: "categoryKey & pageTitle required" });
     }
 
-    // validate status
     if (!["active", "inactive"].includes(status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    const exists = await Category.findOne({
-      categoryKey: categoryKey.toLowerCase(),
-    });
-    if (exists)
-      return res.status(400).json({ message: "Category already exists" });
+    const exists = await Category.findOne({ categoryKey: categoryKey.toLowerCase() });
+    if (exists) return res.status(400).json({ message: "Category already exists" });
 
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
     const mainImage = req.files?.image?.[0];
-
     if (mainImage) {
-      console.log("IMAGE RECEIVED:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
 
     // ===== FEATURES =====
-    let features = [];
-    if (req.body.features) {
-      const parsedFeatures =
-        typeof req.body.features === "string"
-          ? JSON.parse(req.body.features)
-          : req.body.features;
+    const features = {
+      title: req.body.featuresTitle || "",
+      description: req.body.featuresDescription || "",
+      images: [],
+    };
 
-      features = await Promise.all(
-        parsedFeatures.map(async (feature, index) => {
-          let featureImageUrl = "/images/placeholder.png";
-          const featureImage = req.files?.[`featureImage_${index}`]?.[0];
-
-          if (featureImage) {
-            const result = await uploadToCloud(
-              featureImage.buffer,
-              "categories/features"
-            );
-            featureImageUrl = result.secure_url;
-          }
-
-          return {
-            title: feature.title,
-            description: feature.description || "",
-            image: featureImageUrl,
-          };
-        })
+    const featureImageFiles = req.files?.featureImages || [];
+    if (featureImageFiles.length > 0) {
+      features.images = await Promise.all(
+        featureImageFiles.map((file) =>
+          uploadToCloud(file.buffer, "categories/features").then((r) => r.secure_url)
+        )
       );
     }
 
@@ -104,9 +82,7 @@ export const getCategories = async (req, res) => {
 export const getCategoryById = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
+    if (!category) return res.status(404).json({ message: "Category not found" });
     res.json(category);
   } catch (err) {
     console.error("Get Category Error:", err);
@@ -118,62 +94,46 @@ export const getCategoryById = async (req, res) => {
 export const updateCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
+    if (!category) return res.status(404).json({ message: "Category not found" });
 
     const updateData = { ...req.body };
 
-    // validate status
-    if (
-      updateData.status &&
-      !["active", "inactive"].includes(updateData.status)
-    ) {
+    if (updateData.status && !["active", "inactive"].includes(updateData.status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
     // ===== MAIN IMAGE =====
     const mainImage = req.files?.image?.[0];
     if (mainImage) {
-      console.log("IMAGE RECEIVED FOR UPDATE:", mainImage.originalname);
       const result = await uploadToCloud(mainImage.buffer, "categories");
       updateData.image = result.secure_url;
     }
 
     // ===== FEATURES =====
-    if (req.body.features) {
-      const parsedFeatures =
-        typeof req.body.features === "string"
-          ? JSON.parse(req.body.features)
-          : req.body.features;
+    const existingFeatures = category.features || {};
 
-      updateData.features = await Promise.all(
-        parsedFeatures.map(async (feature, index) => {
-          let featureImageUrl = feature.image || "/images/placeholder.png";
-          const featureImage = req.files?.[`featureImage_${index}`]?.[0];
+    // existing images jo frontend ne bheje (remove nahi ki)
+    const existingImages = req.body.existingFeatureImages
+      ? Array.isArray(req.body.existingFeatureImages)
+        ? req.body.existingFeatureImages
+        : [req.body.existingFeatureImages]
+      : existingFeatures.images || [];
 
-          if (featureImage) {
-            const result = await uploadToCloud(
-              featureImage.buffer,
-              "categories/features"
-            );
-            featureImageUrl = result.secure_url;
-          }
-
-          return {
-            title: feature.title,
-            description: feature.description || "",
-            image: featureImageUrl,
-          };
-        })
-      );
-    }
-
-    const updated = await Category.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
+    // new images upload
+    const featureImageFiles = req.files?.featureImages || [];
+    const uploadedImages = await Promise.all(
+      featureImageFiles.map((file) =>
+        uploadToCloud(file.buffer, "categories/features").then((r) => r.secure_url)
+      )
     );
 
+    updateData.features = {
+      title: req.body.featuresTitle ?? existingFeatures.title ?? "",
+      description: req.body.featuresDescription ?? existingFeatures.description ?? "",
+      images: [...existingImages, ...uploadedImages],
+    };
+
+    const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(updated);
   } catch (err) {
     console.error("Update Category Error:", err);
@@ -185,9 +145,7 @@ export const updateCategory = async (req, res) => {
 export const deleteCategory = async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
+    if (!category) return res.status(404).json({ message: "Category not found" });
     await category.deleteOne();
     res.json({ message: "Deleted successfully" });
   } catch (err) {

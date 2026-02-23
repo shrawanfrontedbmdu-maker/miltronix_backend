@@ -28,22 +28,12 @@ const categorySchema = new mongoose.Schema(
       default: "/images/placeholder.png",
     },
 
-    // ✅ FEATURES FIELD
-    features: [
-      {
-        title: {
-          type: String,
-          required: true,
-        },
-        description: {
-          type: String,
-        },
-        image: {
-          type: String,
-          default: "/images/placeholder.png",
-        },
-      },
-    ],
+    // ✅ FEATURES
+    features: {
+      title: { type: String },
+      description: { type: String },
+      images: [{ type: String }],
+    },
 
     // ✅ STATUS FIELD
     status: {
