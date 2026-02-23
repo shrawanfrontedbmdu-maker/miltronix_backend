@@ -20,7 +20,6 @@ export const createCoupon = async (req, res) => {
       firstPurchaseOnly
     } = req.body;
 
-    // 🔹 Convert to Date objects once
     const start = new Date(startDate);
     const expiry = new Date(expiryDate);
 
@@ -31,7 +30,6 @@ export const createCoupon = async (req, res) => {
       });
     }
 
-    // 🔹 Validate valid dates
     if (isNaN(start.getTime()) || isNaN(expiry.getTime())) {
       return res.status(400).json({
         success: false,
@@ -39,7 +37,6 @@ export const createCoupon = async (req, res) => {
       });
     }
 
-    // 🔹 Expiry must be after start
     if (start >= expiry) {
       return res.status(400).json({
         success: false,
@@ -70,8 +67,8 @@ export const createCoupon = async (req, res) => {
       discountValue,
       minOrderValue,
       maxDiscount: discountType === "percentage" ? maxDiscount : null,
-      startDate: start,     // ✅ store as Date (UTC internally)
-      expiryDate: expiry,   // ✅ store as Date (UTC internally)
+      startDate: start,
+      expiryDate: expiry,
       totalUsage,
       perCustomerLimit,
       visibility,
@@ -298,7 +295,8 @@ export const applyCoupon = async (req, res) => {
       });
     }
 
-    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+    // ✅ FIX: usageLimit → totalUsage (model ka sahi field naam)
+    if (coupon.totalUsage && coupon.usedCount >= coupon.totalUsage) {
       return res
         .status(400)
         .json({ success: false, message: "Coupon usage limit reached" });
@@ -329,10 +327,11 @@ export const applyCoupon = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
 export const getApplicableCoupons = async (req, res) => {
     try {
         const { totalPrice } = req.body;
-        console.log(req.body)
+
         if (typeof totalPrice !== 'number' || totalPrice <= 0) {
             return res.status(400).json({ 
                 success: false, 
@@ -342,9 +341,8 @@ export const getApplicableCoupons = async (req, res) => {
         
         const currentDate = new Date();
         
-        // --- Switched to Aggregation Pipeline for field comparison ---
         const pipeline = [
-            // 1. Initial Filtering (similar to the find() query)
+            // Step 1: Basic filters
             {
                 $match: {
                     status: "active",
@@ -354,23 +352,21 @@ export const getApplicableCoupons = async (req, res) => {
                     minOrderValue: { $lte: totalPrice },
                 }
             },
-            // 2. Filter for Usage Limit (Field-to-Field Comparison)
+            // ✅ FIX: usageLimit → totalUsage (model ka sahi field naam)
+            // totalUsage null matlab unlimited, ya usedCount totalUsage se kam ho
             {
                 $match: {
-                    // Check if usageLimit is null (no limit) OR
-                    // if usedCount is less than usageLimit
                     $or: [
-                        { usageLimit: null },
-                        { $expr: { $lt: ["$usedCount", "$usageLimit"] } }
+                        { totalUsage: null },
+                        { $expr: { $lt: ["$usedCount", "$totalUsage"] } }
                     ]
                 }
             }
         ];
-        console.log(pipeline)
 
         const coupons = await Coupon.aggregate(pipeline);
-        console.log(coupons)
-        // 3. Discount Calculation (JavaScript Logic remains the same)
+
+        // Discount calculation
         const calculatedCoupons = coupons.map(coupon => {
             let effectiveDiscount = 0;
             
@@ -395,12 +391,11 @@ export const getApplicableCoupons = async (req, res) => {
             };
         });
 
-        // 4. Sorting and Limiting
+        // Sort by highest discount, return top 3
         const topCoupons = calculatedCoupons
             .sort((a, b) => b.effectiveDiscount - a.effectiveDiscount)
             .slice(0, 3);
 
-        // 5. Response
         res.status(200).json({
             success: true,
             totalPrice: totalPrice,
