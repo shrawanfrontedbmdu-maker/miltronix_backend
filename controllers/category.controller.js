@@ -2,10 +2,26 @@
 import Category from "../models/category.model.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
+// ✅ Helper — upload.fields() use hone par req.files ek OBJECT hota hai, array nahi
+// req.files = { image: [File], featureImages: [File, File] }
+const getFilesArray = (req) => {
+  if (!req.files) return [];
+  // upload.single() — req.files is array
+  if (Array.isArray(req.files)) return req.files;
+  // upload.fields() — req.files is object, flatten karo
+  return Object.values(req.files).flat();
+};
+
 // ================= CREATE CATEGORY =================
 export const createCategory = async (req, res) => {
   try {
-    const { categoryKey, pageTitle, pageSubtitle = "", description = "", status = "active" } = req.body;
+    const {
+      categoryKey,
+      pageTitle,
+      pageSubtitle = "",
+      description = "",
+      status = "active",
+    } = req.body;
 
     if (!categoryKey || !pageTitle) {
       return res.status(400).json({ message: "categoryKey & pageTitle required" });
@@ -18,26 +34,31 @@ export const createCategory = async (req, res) => {
     const exists = await Category.findOne({ categoryKey: categoryKey.toLowerCase() });
     if (exists) return res.status(400).json({ message: "Category already exists" });
 
-    const filesArray = Array.isArray(req.files) ? req.files : [];
+    // ✅ FIX: getFilesArray use karo
+    const filesArray = getFilesArray(req);
+    console.log("CREATE - Total files received:", filesArray.length);
+    console.log("CREATE - Files:", filesArray.map(f => ({ fieldname: f.fieldname, name: f.originalname, size: f.buffer?.length })));
 
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
     const mainImage = filesArray.find(f => f.fieldname === "image");
-    if (mainImage && mainImage.buffer) {
+    if (mainImage?.buffer) {
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
+      console.log("CREATE - Main image uploaded:", imageUrl);
     }
 
     // ===== FEATURE IMAGES =====
-    const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages") ;
+    const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages");
     console.log("CREATE - Feature files found:", featureImageFiles.length);
 
     let featureImages = [];
     if (featureImageFiles.length > 0) {
       featureImages = await Promise.all(
-        featureImageFiles.map(file => {
+        featureImageFiles.map(async (file) => {
           console.log("Uploading feature file:", file.originalname, "Buffer size:", file.buffer?.length);
-          return uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url);
+          const result = await uploadToCloud(file.buffer, "categories/features");
+          return result.secure_url;
         })
       );
     }
@@ -49,9 +70,9 @@ export const createCategory = async (req, res) => {
       description,
       image: imageUrl,
       features: {
-        title: req.body.featuresTitle || "",
+        title:       req.body.featuresTitle       || "",
         description: req.body.featuresDescription || "",
-        images: featureImages,
+        images:      featureImages,
       },
       status,
     });
@@ -69,24 +90,25 @@ export const updateCategory = async (req, res) => {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
 
-    const filesArray = Array.isArray(req.files) ? req.files : [];
+    // ✅ FIX: getFilesArray use karo — req.files object hai array nahi
+    const filesArray = getFilesArray(req);
 
     console.log("UPDATE - REQ.BODY:", req.body);
     console.log("UPDATE - Total files received:", filesArray.length);
     console.log("UPDATE - Files:", filesArray.map(f => ({
-      fieldname: f.fieldname,
+      fieldname:    f.fieldname,
       originalname: f.originalname,
-      hasBuffer: !!f.buffer,
-      bufferSize: f.buffer?.length,
+      hasBuffer:    !!f.buffer,
+      bufferSize:   f.buffer?.length,
     })));
 
     // ===== BASE UPDATE DATA =====
     const updateData = {
-      categoryKey: req.body.categoryKey?.toLowerCase() || category.categoryKey,
-      pageTitle: req.body.pageTitle || category.pageTitle,
+      categoryKey:  req.body.categoryKey?.toLowerCase() || category.categoryKey,
+      pageTitle:    req.body.pageTitle    || category.pageTitle,
       pageSubtitle: req.body.pageSubtitle ?? category.pageSubtitle,
-      description: req.body.description ?? category.description,
-      status: req.body.status || category.status,
+      description:  req.body.description  ?? category.description,
+      status:       req.body.status       || category.status,
     };
 
     if (!["active", "inactive"].includes(updateData.status)) {
@@ -95,7 +117,7 @@ export const updateCategory = async (req, res) => {
 
     // ===== MAIN IMAGE =====
     const mainImage = filesArray.find(f => f.fieldname === "image");
-    if (mainImage && mainImage.buffer) {
+    if (mainImage?.buffer) {
       try {
         console.log("Uploading main image:", mainImage.originalname);
         const result = await uploadToCloud(mainImage.buffer, "categories");
@@ -110,11 +132,9 @@ export const updateCategory = async (req, res) => {
     // ===== EXISTING FEATURE IMAGES =====
     let existingImages = [];
     if (req.body.existingFeatureImages) {
-      if (Array.isArray(req.body.existingFeatureImages)) {
-        existingImages = req.body.existingFeatureImages;
-      } else if (typeof req.body.existingFeatureImages === "string") {
-        existingImages = [req.body.existingFeatureImages];
-      }
+      existingImages = Array.isArray(req.body.existingFeatureImages)
+        ? req.body.existingFeatureImages
+        : [req.body.existingFeatureImages];
     } else if (category.features?.images?.length) {
       existingImages = category.features.images;
     }
@@ -145,9 +165,9 @@ export const updateCategory = async (req, res) => {
     // ===== FEATURES UPDATE =====
     const existingFeatures = category.features || {};
     updateData.features = {
-      title: req.body.featuresTitle ?? existingFeatures.title ?? "",
+      title:       req.body.featuresTitle       ?? existingFeatures.title       ?? "",
       description: req.body.featuresDescription ?? existingFeatures.description ?? "",
-      images: [...existingImages, ...uploadedImages],
+      images:      [...existingImages, ...uploadedImages],
     };
 
     console.log("Final feature images count:", updateData.features.images.length);
