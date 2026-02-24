@@ -34,6 +34,8 @@ import addressRoutes from "./routes/address.routes.js";
 import checkoutRoutes from "./routes/checkout.route.js";
 import couponRoutes from "./routes/coupons.route.js";
 import reviewRoutes from "./routes/review.routes.js";
+import topDealRoutes from "./routes/topDeal.routes.js";
+
 
 const app = express();
 
@@ -91,7 +93,7 @@ app.use("/api/coupons",couponRoutes);
 app.use("/api/reviews", reviewRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
 app.use("/api/addresses", addressRoutes);
-
+app.use("/api/top-deal", topDealRoutes);
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled server error:', err.stack || err);

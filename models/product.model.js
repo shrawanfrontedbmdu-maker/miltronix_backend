@@ -23,11 +23,12 @@ const variantSchema = new mongoose.Schema(
       enum: ["in-stock", "low-stock", "out-of-stock"],
       default: "out-of-stock",
     },
+    // dimensions & shipping metadata
     dimensions: {
-      weight: { type: Number, min: 0, default: 0 },
-      length: { type: Number, min: 0, default: 0 },
-      width: { type: Number, min: 0, default: 0 },
-      height: { type: Number, min: 0, default: 0 },
+      weight: { type: Number, min: 0,default: 0 },
+      length: { type: Number, min: 0 ,default: 0},
+      width: { type: Number, min: 0 ,default: 0},
+      height: { type: Number, min: 0,default: 0 },
       unit: { type: String, default: "cm" },
     },
     attributes: {
@@ -110,36 +111,31 @@ const productSchema = new mongoose.Schema(
 
     variants: { type: [variantSchema], default: [] },
 
+    // electronics-specific fields (already present kept as required)
     warranty: { type: String, required: true, trim: true },
     returnPolicy: { type: String, required: true, trim: true },
 
     // visibility / marketing
     isRecommended: { type: Boolean, default: false },
-    isFeatured:    { type: Boolean, default: false },
-    isDigital:     { type: Boolean, default: false },
-
-    // ✅ TOP DEAL FIELDS
-    isTopDeal:          { type: Boolean, default: false },
-    topDealTitle:       { type: String, trim: true, default: "" },
-    topDealDescription: { type: String, trim: true, default: "" },
-
+    isFeatured: { type: Boolean, default: false },
+    isDigital: { type: Boolean, default: false },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
 
     // SEO & tags
-    metaTitle:       { type: String, trim: true },
+    metaTitle: { type: String, trim: true },
     metaDescription: { type: String, trim: true },
-    keywords:        { type: [String], default: [] },
+    keywords: { type: [String], default: [] },
 
     // ratings & relations
-    avgRating:       { type: Number, default: 0, min: 0, max: 5 },
-    reviewCount:     { type: Number, default: 0 },
+    avgRating: { type: Number, default: 0, min: 0, max: 5 },
+    reviewCount: { type: Number, default: 0 },
     relatedProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
 
     // soft delete & audit
     isArchived: { type: Boolean, default: false },
-    deletedAt:  Date,
-    createdBy:  { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
-    metadata:   { type: Object, default: {} },
+    deletedAt: Date,
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+    metadata: { type: Object, default: {} },
 
     tags: { type: [String], default: [] },
   },
@@ -161,15 +157,19 @@ productSchema.pre("save", function (next) {
         }
       });
     }
+
     next();
   } catch (err) {
     next(err);
   }
 });
 
+// enforce global uniqueness for variant SKUs (each array element is indexed)
 productSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
+// Text search for product listing/search
 productSchema.index({ name: "text", description: "text", brand: "text", tags: "text" });
+
+// Useful compound indexes for listing/filtering
 productSchema.index({ category: 1, status: 1, isRecommended: 1 });
-productSchema.index({ isTopDeal: 1, status: 1 }); // ✅ Top deals query performance
 
 export default mongoose.model("Product", productSchema);
