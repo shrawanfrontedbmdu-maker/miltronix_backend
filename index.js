@@ -8,7 +8,7 @@ import cors from "cors";
 
 // Routes
 import productRoutes from "./routes/product.route.js";
-import categoryRoutes from "./routes/category.routes.js";
+import categoryRoutes from "./routes/category.routes.js";  // category.routes.js
 import subcategoryRoutes from "./routes/subcategory.route.js";
 import filterGroupRoutes from "./routes/filterGroup.route.js";
 import filterOptionRoutes from "./routes/filterOption.route.js";
