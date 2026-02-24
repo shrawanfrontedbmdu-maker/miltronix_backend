@@ -1,29 +1,19 @@
 import express from "express";
-import {
-  createCategory,
-  getCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
-} from "../controllers/category.controller.js";
-
 import { upload } from "../middlewares/uploadcategory.js";
+import { createCategory, getCategories, getCategoryById, updateCategory, deleteCategory } from "../controllers/category.controller.js";
 
 const router = express.Router();
 
-// CREATE
+// DEBUG — add karo temporarily
+router.use((req, res, next) => {
+  console.log("Category route hit:", req.method, req.url);
+  next();
+});
+
 router.post("/", upload.any(), createCategory);
-
-// GET ALL
 router.get("/", getCategories);
-
-// GET BY ID
 router.get("/:id", getCategoryById);
-
-// UPDATE
 router.put("/:id", upload.any(), updateCategory);
-
-// DELETE
 router.delete("/:id", deleteCategory);
 
 export default router;
