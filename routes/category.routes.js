@@ -14,7 +14,10 @@ const router = express.Router();
 // ===== CREATE CATEGORY =====
 router.post(
   "/",
-  upload.fields([{ name: "image", maxCount: 1 }]), 
+ upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "featureImages", maxCount: 10 },
+  ]),
   createCategory
 );
 
@@ -24,10 +27,12 @@ router.get("/", getCategories);
 // ===== GET BY ID =====
 router.get("/:id", getCategoryById);
 
-// ===== UPDATE CATEGORY =====
 router.put(
   "/:id",
-  upload.fields([{ name: "image", maxCount: 1 }]), 
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "featureImages", maxCount: 10 },
+  ]),
   updateCategory
 );
 

@@ -29,7 +29,7 @@ export const createCategory = async (req, res) => {
     }
 
     // ===== FEATURE IMAGES =====
-    const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages");
+    const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages") ;
     console.log("CREATE - Feature files found:", featureImageFiles.length);
 
     let featureImages = [];
@@ -37,7 +37,7 @@ export const createCategory = async (req, res) => {
       featureImages = await Promise.all(
         featureImageFiles.map(file => {
           console.log("Uploading feature file:", file.originalname, "Buffer size:", file.buffer?.length);
-          return uploadToCloud(file.buffer, "categories").then(r => r.secure_url);
+          return uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url);
         })
       );
     }
