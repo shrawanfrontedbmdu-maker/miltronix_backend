@@ -18,21 +18,27 @@ export const createCategory = async (req, res) => {
     const exists = await Category.findOne({ categoryKey: categoryKey.toLowerCase() });
     if (exists) return res.status(400).json({ message: "Category already exists" });
 
+    const filesArray = Array.isArray(req.files) ? req.files : [];
+
     // ===== MAIN IMAGE =====
     let imageUrl = "/images/placeholder.png";
-    const filesArray = Array.isArray(req.files) ? req.files : [];
     const mainImage = filesArray.find(f => f.fieldname === "image");
-    if (mainImage) {
+    if (mainImage && mainImage.buffer) {
       const result = await uploadToCloud(mainImage.buffer, "categories");
       imageUrl = result.secure_url;
     }
 
-    // ===== FEATURES =====
+    // ===== FEATURE IMAGES =====
     const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages");
+    console.log("CREATE - Feature files found:", featureImageFiles.length);
+
     let featureImages = [];
     if (featureImageFiles.length > 0) {
       featureImages = await Promise.all(
-        featureImageFiles.map(file => uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url))
+        featureImageFiles.map(file => {
+          console.log("Uploading feature file:", file.originalname, "Buffer size:", file.buffer?.length);
+          return uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url);
+        })
       );
     }
 
@@ -53,17 +59,26 @@ export const createCategory = async (req, res) => {
     res.status(201).json(category);
   } catch (err) {
     console.error("Create Category Error:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: err.message, stack: err.stack });
   }
 };
+
 // ================= UPDATE CATEGORY =================
 export const updateCategory = async (req, res) => {
-  console.log("REQ.BODY:", req.body);
-  console.log("REQ.FILES:", req.files);
-
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ message: "Category not found" });
+
+    const filesArray = Array.isArray(req.files) ? req.files : [];
+
+    console.log("UPDATE - REQ.BODY:", req.body);
+    console.log("UPDATE - Total files received:", filesArray.length);
+    console.log("UPDATE - Files:", filesArray.map(f => ({
+      fieldname: f.fieldname,
+      originalname: f.originalname,
+      hasBuffer: !!f.buffer,
+      bufferSize: f.buffer?.length,
+    })));
 
     // ===== BASE UPDATE DATA =====
     const updateData = {
@@ -78,25 +93,21 @@ export const updateCategory = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    // ===== HANDLE FILES =====
-    const filesArray = Array.isArray(req.files) ? req.files : [];
-
-    // ---- MAIN IMAGE ----
+    // ===== MAIN IMAGE =====
     const mainImage = filesArray.find(f => f.fieldname === "image");
     if (mainImage && mainImage.buffer) {
       try {
+        console.log("Uploading main image:", mainImage.originalname);
         const result = await uploadToCloud(mainImage.buffer, "categories");
         updateData.image = result.secure_url;
+        console.log("Main image uploaded:", updateData.image);
       } catch (e) {
         console.error("Main image upload failed:", e);
-        return res.status(500).json({ message: "Main image upload failed" });
+        return res.status(500).json({ message: "Main image upload failed", error: e.message });
       }
     }
 
-    // ---- FEATURES ----
-    const existingFeatures = category.features || {};
-
-    // Safely handle existingFeatureImages
+    // ===== EXISTING FEATURE IMAGES =====
     let existingImages = [];
     if (req.body.existingFeatureImages) {
       if (Array.isArray(req.body.existingFeatureImages)) {
@@ -104,41 +115,54 @@ export const updateCategory = async (req, res) => {
       } else if (typeof req.body.existingFeatureImages === "string") {
         existingImages = [req.body.existingFeatureImages];
       }
-    } else if (existingFeatures.images?.length) {
-      existingImages = existingFeatures.images;
+    } else if (category.features?.images?.length) {
+      existingImages = category.features.images;
     }
+    console.log("Existing feature images kept:", existingImages.length);
 
-    // New feature images
+    // ===== NEW FEATURE IMAGES =====
     const featureImageFiles = filesArray.filter(f => f.fieldname === "featureImages");
+    console.log("New feature image files received:", featureImageFiles.length);
+
     let uploadedImages = [];
     if (featureImageFiles.length > 0) {
       try {
         uploadedImages = await Promise.all(
-          featureImageFiles.map(file =>
-            uploadToCloud(file.buffer, "categories/features").then(r => r.secure_url)
-          )
+          featureImageFiles.map(async (file) => {
+            console.log("Uploading feature image:", file.originalname, "Buffer:", file.buffer?.length);
+            if (!file.buffer) throw new Error(`Buffer missing for file: ${file.originalname}`);
+            const result = await uploadToCloud(file.buffer, "categories/features");
+            console.log("Feature image uploaded:", result.secure_url);
+            return result.secure_url;
+          })
         );
       } catch (e) {
-        console.error("Feature images upload failed:", e);
-        return res.status(500).json({ message: "Feature images upload failed" });
+        console.error("Feature image upload failed:", e);
+        return res.status(500).json({ message: "Feature image upload failed", error: e.message });
       }
     }
 
+    // ===== FEATURES UPDATE =====
+    const existingFeatures = category.features || {};
     updateData.features = {
       title: req.body.featuresTitle ?? existingFeatures.title ?? "",
       description: req.body.featuresDescription ?? existingFeatures.description ?? "",
       images: [...existingImages, ...uploadedImages],
     };
 
-    // ===== UPDATE CATEGORY =====
+    console.log("Final feature images count:", updateData.features.images.length);
+
+    // ===== SAVE =====
     const updated = await Category.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    console.log("Category updated successfully:", updated._id);
 
     res.json(updated);
   } catch (err) {
-    console.error("Update Category Error:", err);
-    res.status(500).json({ message: err.message });
+    console.error("Update Category Error FULL:", err);
+    res.status(500).json({ message: err.message, stack: err.stack });
   }
 };
+
 // ================= GET ALL =================
 export const getCategories = async (req, res) => {
   try {
