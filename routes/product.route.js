@@ -7,9 +7,11 @@ import {
   deleteProduct,
   getFeaturedProducts,
   getRecommendedProducts,
-  getTopDealProducts, 
+  getTopDealProducts,
   searchProducts,
   searchSuggestions,
+  addProductToDeal,
+  removeProductFromDeal,
 } from "../controllers/product.controller.js";
 import upload from "../middlewares/multer.js";
 
@@ -21,19 +23,23 @@ router.post("/", upload.any(), createProduct);
 /* ================= GET ALL PRODUCTS ================= */
 router.get("/", getProducts);
 
+/* ================= SEARCH ================= */
 router.get("/search-suggestions", searchSuggestions);
 router.get("/search", searchProducts);
 
-/* ================= GET FEATURED PRODUCTS ================= */
+/* ================= FEATURED / RECOMMENDED ================= */
 router.get("/featured", getFeaturedProducts);
-
 router.get("/recommended", getRecommendedProducts);
 
-/* ================= GET TOP DEAL PRODUCTS ================= */ 
+/* ================= TOP DEAL — Active deal fetch (frontend) ================= */
 router.get("/top-deals", getTopDealProducts);
 
+/* ================= TOP DEAL — Add / Remove product ================= */
+router.patch("/top-deals/:id/add-product", addProductToDeal);
+router.patch("/top-deals/:id/remove-product", removeProductFromDeal);
+
 /* ================= GET PRODUCT BY ID ================= */
-router.get("/:id", getProductById); 
+router.get("/:id", getProductById);
 
 /* ================= UPDATE PRODUCT ================= */
 router.put("/:id", upload.any(), updateProduct);

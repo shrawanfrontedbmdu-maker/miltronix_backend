@@ -93,7 +93,7 @@ app.use("/api/coupons",couponRoutes);
 app.use("/api/reviews", reviewRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
 app.use("/api/addresses", addressRoutes);
-app.use("/api/top-deal", topDealRoutes);
+app.use("/api/top-deals", topDealRoutes);
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled server error:', err.stack || err);
