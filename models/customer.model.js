@@ -32,7 +32,11 @@ const orderSchema = new mongoose.Schema({
     totalAmount: { type: Number, required: true },
     paymentMethod: { type: String, enum: ["COD", "Card", "UPI", "NetBanking"], required: true },
     paymentStatus: { type: String, enum: ["Pending", "Paid", "Failed"], default: "Pending" },
-    orderStatus: { type: String, enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Returned"], default: "Pending" },
+    orderStatus: {
+        type: String,
+        enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Returned"],
+        default: "Pending",
+    },
     shippingAddress: addressSchema,
     placedAt: { type: Date, default: Date.now },
 });
@@ -49,7 +53,10 @@ const customerSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true, lowercase: true },
     phone: { type: String, required: true, unique: true, match: /^[6-9]\d{9}$/ },
     password: { type: String, required: true },
-    profileImage: { type: String },
+
+    // ✅ FIXED: profileImageId added
+    profileImage: { type: String, default: "" },
+    profileImageId: { type: String, default: "" },
 
     addresses: [addressSchema],
     cart: [cartItemSchema],
@@ -58,16 +65,19 @@ const customerSchema = new mongoose.Schema({
     reviews: [reviewSchema],
 
     walletBalance: { type: Number, default: 0 },
-    rewardPoints: { type: Number, default: 0 }, // total usable points
+    rewardPoints: { type: Number, default: 0 },
 
     rewardHistory: [
         {
-            points: { type: Number, required: true }, // + add, - deduct
+            points: { type: Number, required: true },
+            // ✅ FIXED: type field added for credit/debit tracking
+            type: { type: String, enum: ["credit", "debit"], required: true },
             remark: { type: String },
             expiryDate: { type: Date },
-            createdAt: { type: Date, default: Date.now }
-        }
+            createdAt: { type: Date, default: Date.now },
+        },
     ],
+
     referralCode: { type: String },
 
     role: { type: String, enum: ["customer", "admin"], default: "customer" },
@@ -79,20 +89,23 @@ const customerSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now },
 });
 
+// 🔐 Hash password before save
 customerSchema.pre("save", async function (next) {
     if (!this.isModified("password")) return next();
-
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
 });
 
+// ✅ Compare password method
 customerSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 
+// 🕒 Auto-update updatedAt
 customerSchema.pre("save", function (next) {
     this.updatedAt = Date.now();
     next();
 });
+
 export const Customer = mongoose.model("Customer", customerSchema);

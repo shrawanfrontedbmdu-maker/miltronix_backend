@@ -14,16 +14,12 @@ cloudinary.config({
 export const uploadImage = (fileBuffer) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: "products",
-        resource_type: "image",
-      },
+      { folder: "products", resource_type: "image" },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
       }
     );
-
     streamifier.createReadStream(fileBuffer).pipe(stream);
   });
 };
@@ -32,16 +28,12 @@ export const uploadImage = (fileBuffer) => {
 export const uploadBlogImage = (fileBuffer) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: "blogs",
-        resource_type: "image",
-      },
+      { folder: "blogs", resource_type: "image" },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
       }
     );
-
     streamifier.createReadStream(fileBuffer).pipe(stream);
   });
 };
@@ -50,16 +42,26 @@ export const uploadBlogImage = (fileBuffer) => {
 export const uploadBannerImage = (fileBuffer) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: "banners",
-        resource_type: "image",
-      },
+      { folder: "banners", resource_type: "image" },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
       }
     );
+    streamifier.createReadStream(fileBuffer).pipe(stream);
+  });
+};
 
+/* ================= UPLOAD CUSTOMER PROFILE IMAGE ================= */
+export const uploadCustomerProfileImage = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "customers", resource_type: "image" },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
     streamifier.createReadStream(fileBuffer).pipe(stream);
   });
 };
@@ -69,3 +71,6 @@ export const deleteImage = async (public_id) => {
   if (!public_id) return;
   return await cloudinary.uploader.destroy(public_id);
 };
+
+// ✅ Sirf cloudinary export karo — baaki sab upar export ho chuke hain
+export { cloudinary };

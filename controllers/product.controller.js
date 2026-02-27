@@ -190,9 +190,8 @@ export const createProduct = async (req, res) => {
 /* ================= GET ALL PRODUCTS ================= */
 export const getProducts = async (req, res) => {
   try {
-    const { categoryKey, category, search } = req.query;
+    const { categoryKey, category, search, maxPrice, filterOptions } = req.query;
 
-    // Archived products kabhi list mein nahi aane chahiye
     let filter = { isArchived: false };
 
     if (category) filter.category = category;
@@ -205,6 +204,26 @@ export const getProducts = async (req, res) => {
 
     if (search) filter.name = { $regex: search, $options: "i" };
 
+    // ⭐ Price filter — variants array mein se koi bhi variant maxPrice ke andar ho
+    if (maxPrice) {
+      filter["variants"] = {
+        $elemMatch: { price: { $lte: Number(maxPrice) } },
+      };
+    }
+
+    // ⭐ FilterOptions filter — filterOptions query param comma-separated IDs hain
+    // e.g. filterOptions=id1,id2,id3
+    if (filterOptions) {
+      const ids = filterOptions
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+      if (ids.length > 0) {
+        filter.filterOptions = { $in: ids };
+      }
+    }
+
     const products = await Product.find(filter)
       .populate("category", "name slug categoryKey")
       .sort({ createdAt: -1 });
@@ -215,7 +234,6 @@ export const getProducts = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 /* ================= GET PRODUCT BY ID ================= */
 export const getProductById = async (req, res) => {
   try {
