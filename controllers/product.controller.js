@@ -204,22 +204,23 @@ export const getProducts = async (req, res) => {
 
     if (search) filter.name = { $regex: search, $options: "i" };
 
-    // ⭐ Price filter — variants array mein se koi bhi variant maxPrice ke andar ho
+    // ⭐ Price filter — variants mein se koi bhi variant maxPrice ke andar ho
     if (maxPrice) {
       filter["variants"] = {
         $elemMatch: { price: { $lte: Number(maxPrice) } },
       };
     }
 
-    // ⭐ FilterOptions filter — filterOptions query param comma-separated IDs hain
-    // e.g. filterOptions=id1,id2,id3
+    // ⭐ FilterOptions — string IDs ko mongoose.Types.ObjectId mein convert karo
     if (filterOptions) {
       const ids = filterOptions
         .split(",")
         .map((id) => id.trim())
-        .filter(Boolean);
+        .filter((id) => mongoose.Types.isValid(id))          // invalid IDs skip
+        .map((id) => new mongoose.Types.ObjectId(id));       // string → ObjectId
 
       if (ids.length > 0) {
+        // Product ke filterOptions array mein se koi bhi ek match ho
         filter.filterOptions = { $in: ids };
       }
     }
