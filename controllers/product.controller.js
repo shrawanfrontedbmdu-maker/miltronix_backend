@@ -216,7 +216,7 @@ export const getProducts = async (req, res) => {
       const ids = filterOptions
         .split(",")
         .map((id) => id.trim())
-        .filter((id) => mongoose.Types.isValid(id))          // invalid IDs skip
+       .filter((id) => mongoose.isValidObjectId(id))  // ✅ ye lagao         // invalid IDs skip
         .map((id) => new mongoose.Types.ObjectId(id));       // string → ObjectId
 
       if (ids.length > 0) {
