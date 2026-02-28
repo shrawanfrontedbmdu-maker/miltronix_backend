@@ -1,4 +1,5 @@
 import Review from "../models/review.model.js";
+import Product from "../models/product.model.js";
 import flaggedKeywords from "../utils/flaggedKeywordsList.js";
 import { uploadToCloud } from "../config/cloudinary.js";
 
@@ -6,7 +7,6 @@ const checkForFlaggedKeywords = (text) => {
   if (!text || typeof text !== 'string') {
     return [];
   }
-
   const foundKeywords = [];
   const lowerCaseText = text.toLowerCase();
   flaggedKeywords.forEach((keyword) => {
@@ -28,32 +28,24 @@ export const createReview = async (req, res) => {
 
     const keywords = checkForFlaggedKeywords(reviewText);
 
-    // Upload images to Cloudinary
     let images = [];
     if (req.files?.images && Array.isArray(req.files.images)) {
       for (const file of req.files.images) {
         try {
           const result = await uploadToCloud(file.buffer, "review-images");
-          images.push({
-            url: result.secure_url,
-            public_id: result.public_id,
-          });
+          images.push({ url: result.secure_url, public_id: result.public_id });
         } catch (err) {
           console.error("Error uploading image to Cloudinary:", err);
         }
       }
     }
 
-    // Upload videos to Cloudinary
     let videos = [];
     if (req.files?.videos && Array.isArray(req.files.videos)) {
       for (const file of req.files.videos) {
         try {
           const result = await uploadToCloud(file.buffer, "review-videos");
-          videos.push({
-            url: result.secure_url,
-            public_id: result.public_id,
-          });
+          videos.push({ url: result.secure_url, public_id: result.public_id });
         } catch (err) {
           console.error("Error uploading video to Cloudinary:", err);
         }
@@ -85,7 +77,6 @@ export const getAllReviews = async (req, res) => {
     if (status && ["pending", "approved", "deleted"].includes(status)) {
       query.status = status;
     }
-
     const reviews = await Review.find(query).sort({ createdAt: -1 });
     res.json(reviews);
   } catch (err) {
@@ -103,7 +94,6 @@ export const getReviewById = async (req, res) => {
     res.json(review);
   } catch (err) {
     console.error(err.message);
-    // FIX: Handle invalid MongoDB ObjectId format to prevent a 500 error.
     if (err.kind === 'ObjectId') {
       return res.status(404).json({ msg: "Review not found" });
     }
@@ -120,17 +110,29 @@ export const updateReviewStatus = async (req, res) => {
     }
 
     let review = await Review.findById(req.params.id);
-
     if (!review) {
       return res.status(404).json({ msg: "Review not found" });
     }
 
     review.status = status;
     await review.save();
+
+    // ✅ Approve hone pe product ka avgRating aur reviewCount update karo
+    if (status === "approved") {
+      const allApproved = await Review.find({ product: review.product, status: "approved" });
+      console.log("✅ Approved reviews count:", allApproved.length);
+      const avg = allApproved.reduce((sum, r) => sum + Number(r.rating || 0), 0) / allApproved.length;
+      console.log("✅ Calculated avgRating:", avg);
+      await Product.findByIdAndUpdate(review.product, {
+        avgRating: parseFloat(avg.toFixed(1)),
+        reviewCount: allApproved.length,
+      });
+      console.log("✅ Product updated — productId:", review.product);
+    }
+
     res.json(review);
   } catch (err) {
     console.error(err.message);
-    // FIX: Handle invalid ObjectId format.
     if (err.kind === 'ObjectId') {
       return res.status(404).json({ msg: "Review not found" });
     }
@@ -141,17 +143,13 @@ export const updateReviewStatus = async (req, res) => {
 export const deleteReview = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
-
     if (!review) {
       return res.status(404).json({ msg: "Review not found" });
     }
-
     await review.deleteOne();
-
     res.json({ msg: "Review removed" });
   } catch (err) {
     console.error(err.message);
-    // FIX: Handle invalid ObjectId format.
     if (err.kind === 'ObjectId') {
       return res.status(404).json({ msg: "Review not found" });
     }
@@ -163,35 +161,30 @@ export const getReviewsByProductId = async (req, res) => {
   try {
     const { productId } = req.params;
 
-    // Validate ObjectId
     if (!productId || productId.length !== 24) {
       return res.status(400).json({ msg: "Invalid product ID" });
     }
 
-    // Fetch all reviews for this product
-    const reviews = await Review.find({ product: productId }).populate("customer", "fullName email").sort({ createdAt: -1 });
+    const reviews = await Review.find({ product: productId })
+      .populate("customer", "fullName email")
+      .sort({ createdAt: -1 });
 
-    // Calculate average rating
     let averageRating = 0;
-
     if (reviews.length > 0) {
       const total = reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0);
-      averageRating = (total / reviews.length).toFixed(1); // 1 decimal point
+      averageRating = (total / reviews.length).toFixed(1);
     }
 
     res.json({
       reviews,
       averageRating: Number(averageRating),
-      totalReviews: reviews.length
+      totalReviews: reviews.length,
     });
-
   } catch (err) {
     console.error(err.message);
-
     if (err.kind === "ObjectId") {
       return res.status(400).json({ msg: "Invalid product ID" });
     }
-
     res.status(500).json({ message: "Server Error" });
   }
 };
