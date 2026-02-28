@@ -109,7 +109,7 @@ export const updateReviewStatus = async (req, res) => {
       return res.status(400).json({ msg: "Invalid status provided" });
     }
 
-    let review = await Review.findById(req.params.id);
+    let review = await Review.findById(req.params.id).populate("product"); // ✅ populate add kiya
     if (!review) {
       return res.status(404).json({ msg: "Review not found" });
     }
@@ -117,17 +117,22 @@ export const updateReviewStatus = async (req, res) => {
     review.status = status;
     await review.save();
 
-    // ✅ Approve hone pe product ka avgRating aur reviewCount update karo
+    // ✅ Approve hone pe product update karo
     if (status === "approved") {
-      const allApproved = await Review.find({ product: review.product, status: "approved" });
+      const productId = review.product?._id || review.product; // ✅ dono cases handle
+      console.log("✅ productId:", productId);
+      
+      const allApproved = await Review.find({ product: productId, status: "approved" });
       console.log("✅ Approved reviews count:", allApproved.length);
+      
       const avg = allApproved.reduce((sum, r) => sum + Number(r.rating || 0), 0) / allApproved.length;
-      console.log("✅ Calculated avgRating:", avg);
-      await Product.findByIdAndUpdate(review.product, {
+      console.log("✅ avgRating:", avg);
+      
+      await Product.findByIdAndUpdate(productId, {
         avgRating: parseFloat(avg.toFixed(1)),
         reviewCount: allApproved.length,
       });
-      console.log("✅ Product updated — productId:", review.product);
+      console.log("✅ Product updated!");
     }
 
     res.json(review);
@@ -139,7 +144,6 @@ export const updateReviewStatus = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-
 export const deleteReview = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
