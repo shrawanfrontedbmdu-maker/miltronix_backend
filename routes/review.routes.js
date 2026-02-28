@@ -21,10 +21,11 @@ router.post(
   authMiddleware,
   createReview
 );
+
 router.get("/", getAllReviews);
-router.get("/:productId", getReviewsByProductId);
+router.get("/product/:productId", getReviewsByProductId);  // ✅ /product/ prefix add kiya
 router.get("/:id", getReviewById);
-router.patch("/:id/status", updateReviewStatus);
-router.delete("/:id", deleteReview);
+router.patch("/:id/status", authMiddleware, updateReviewStatus);  // ✅ auth add kiya
+router.delete("/:id", authMiddleware, deleteReview);
 
 export default router;
