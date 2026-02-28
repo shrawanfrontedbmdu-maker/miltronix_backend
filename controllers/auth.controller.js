@@ -75,7 +75,6 @@ export const signup = async (req, res) => {
   }
 };
 
-// ---------------- VERIFY OTP ----------------
 export const verifyOtp = async (req, res) => {
   try {
     const { mobile, otp } = req.body;
@@ -83,20 +82,31 @@ export const verifyOtp = async (req, res) => {
     const user = await User.findOne({ mobile });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (user.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+    if (String(user.otp) !== String(otp)) return res.status(400).json({ message: "Invalid OTP" }); // ✅ fix
     if (user.otpExpiry < Date.now()) return res.status(400).json({ message: "OTP expired" });
 
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpiry = undefined;
-
     await user.save();
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    // ✅ Customer model mein bhi save karo
+    const existingCustomer = await Customer.findOne({ phone: user.mobile });
+    if (!existingCustomer) {
+      await Customer.create({
+        name: user.fullName,
+        email: user.email || `${user.mobile}@noemail.com`,
+        phone: user.mobile,
+        password: user.password,
+        phoneVerified: true,
+        emailVerified: !!user.email,
+        status: "active",
+      });
+    }
 
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
     res.json({ message: "OTP verified successfully", token, user });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
