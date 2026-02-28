@@ -92,17 +92,22 @@ export const verifyOtp = async (req, res) => {
 
     // ✅ Customer model mein bhi save karo
     const existingCustomer = await Customer.findOne({ phone: user.mobile });
-    if (!existingCustomer) {
-      await Customer.create({
-        name: user.fullName,
-        email: user.email || `${user.mobile}@noemail.com`,
-        phone: user.mobile,
-        password: user.password,
-        phoneVerified: true,
-        emailVerified: !!user.email,
-        status: "active",
-      });
-    }
+if (!existingCustomer) {
+  try {
+    await Customer.create({
+      name: user.fullName,
+      email: user.email || `${user.mobile}@placeholder.com`, // unique guaranteed kyunki mobile unique hai
+      phone: user.mobile,
+      password: user.password,
+      phoneVerified: true,
+      emailVerified: !!user.email,
+      status: "active",
+    });
+    console.log("✅ Customer created successfully");
+  } catch (err) {
+    console.error("❌ Customer create failed:", err.message); // ab error dikh jayega
+  }
+}
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
     res.json({ message: "OTP verified successfully", token, user });
