@@ -6,6 +6,7 @@ import { sendOtpSMS } from "../utils/sendOtp.js";
 import mongoose from "mongoose";
 import Order from "../models/order.model.js";
 import Wishlist from "../models/wishlist.model.js";
+import { Customer } from "../models/customer.model.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -88,8 +89,21 @@ export const verifyOtp = async (req, res) => {
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpiry = undefined;
-
     await user.save();
+
+    // ✅ Customer model mein bhi save karo
+    const existingCustomer = await Customer.findOne({ phone: user.mobile });
+    if (!existingCustomer) {
+      await Customer.create({
+        name: user.fullName,
+        email: user.email || `${user.mobile}@noemail.com`,
+        phone: user.mobile,
+        password: user.password, // already hashed hai
+        phoneVerified: true,
+        emailVerified: !!user.email,
+        status: "active",
+      });
+    }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -100,7 +114,6 @@ export const verifyOtp = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 // ---------------- LOGIN ----------------
 export const login = async (req, res) => {
   try {
