@@ -82,7 +82,7 @@ export const verifyOtp = async (req, res) => {
     const user = await User.findOne({ mobile });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (String(user.otp) !== String(otp)) return res.status(400).json({ message: "Invalid OTP" }); // ✅ fix
+    if (String(user.otp) !== String(otp)) return res.status(400).json({ message: "Invalid OTP" });
     if (user.otpExpiry < Date.now()) return res.status(400).json({ message: "OTP expired" });
 
     user.isVerified = true;
@@ -92,22 +92,23 @@ export const verifyOtp = async (req, res) => {
 
     // ✅ Customer model mein bhi save karo
     const existingCustomer = await Customer.findOne({ phone: user.mobile });
-if (!existingCustomer) {
-  try {
-    await Customer.create({
-      name: user.fullName,
-      email: user.email || `${user.mobile}@placeholder.com`, // unique guaranteed kyunki mobile unique hai
-      phone: user.mobile,
-      password: user.password,
-      phoneVerified: true,
-      emailVerified: !!user.email,
-      status: "active",
-    });
-    console.log("✅ Customer created successfully");
-  } catch (err) {
-    console.error("❌ Customer create failed:", err.message); // ab error dikh jayega
-  }
-}
+    if (!existingCustomer) {
+      try {
+        const tempPassword = await bcrypt.hash(user.mobile + "_auto", 10); // ✅ FIX
+        await Customer.create({
+          name: user.fullName,
+          email: user.email || `${user.mobile}@placeholder.com`,
+          phone: user.mobile,
+          password: tempPassword, // ✅ FIX - pehle user.password tha
+          phoneVerified: true,
+          emailVerified: !!user.email,
+          status: "active",
+        });
+        console.log("✅ Customer created successfully");
+      } catch (err) {
+        console.error("❌ Customer create failed:", err.message);
+      }
+    }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
     res.json({ message: "OTP verified successfully", token, user });
