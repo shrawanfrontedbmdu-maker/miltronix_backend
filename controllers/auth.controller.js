@@ -89,21 +89,8 @@ export const verifyOtp = async (req, res) => {
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpiry = undefined;
-    await user.save();
 
-    // ✅ Customer model mein bhi save karo
-    const existingCustomer = await Customer.findOne({ phone: user.mobile });
-    if (!existingCustomer) {
-      await Customer.create({
-        name: user.fullName,
-        email: user.email || `${user.mobile}@noemail.com`,
-        phone: user.mobile,
-        password: user.password, // already hashed hai
-        phoneVerified: true,
-        emailVerified: !!user.email,
-        status: "active",
-      });
-    }
+    await user.save();
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -114,6 +101,7 @@ export const verifyOtp = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 // ---------------- LOGIN ----------------
 export const login = async (req, res) => {
   try {
