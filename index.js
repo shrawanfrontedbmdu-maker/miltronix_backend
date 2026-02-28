@@ -15,6 +15,7 @@ import filterOptionRoutes from "./routes/filterOption.route.js";
 import orderRoutes from "./routes/order.route.js";
 import authRoutes from "./routes/auth.routes.js";
 import notificationRoutes from "./routes/notificationCampaign.route.js";
+import customerRoutes from "./routes/customer.route.js";
 import customerNotificationRoutes from "./routes/customerNotification.routes.js";
 import invoiceRoutes from "./routes/invoice.routes.js";
 import serviceRequestRoutes from "./routes/serviceRequest.routes.js";
@@ -35,7 +36,7 @@ import checkoutRoutes from "./routes/checkout.route.js";
 import couponRoutes from "./routes/coupons.route.js";
 import reviewRoutes from "./routes/review.routes.js";
 import topDealRoutes from "./routes/topDeal.routes.js";
-import customerRoutes from "./routes/customer.route.js";
+
 
 
 const app = express();
@@ -43,7 +44,7 @@ const app = express();
 // ------------------- MIDDLEWARES -------------------
 app.use(cors({
   origin: "*",
-  methods: ["GET","POST","PUT","DELETE"],
+   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"]
 }));
 
@@ -76,6 +77,7 @@ app.use("/api/brand", brandRouter);
 app.use("/api/orders", orderRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/customer", customerRoutes);
 app.use("/api/customer/notifications", customerNotificationRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/service-requests", serviceRequestRoutes);
@@ -95,7 +97,7 @@ app.use("/api/reviews", reviewRoutes);
 // app.use("/api/recommendations", recommendationsRoutes);
 app.use("/api/addresses", addressRoutes);
 app.use("/api/top-deals", topDealRoutes);
-app.use("/api/customer", customerRoutes);
+
 // ------------------- GLOBAL ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled server error:', err.stack || err);
