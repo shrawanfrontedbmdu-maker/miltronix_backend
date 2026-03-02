@@ -9,14 +9,38 @@ import orderModel from "../models/order.model.js";
 
 export const getOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const orders = await Order.find()
+    const { page = 1, limit = 20, userId } = req.query; // ✅ userId query param add kiya
+    const query = userId ? { user: userId } : {};        // ✅ filter by user if provided
+    const orders = await Order.find(query)
+      .populate({
+        path: "items.productId",
+        select: "images variants",                       // ✅ image resolve ke liye populate
+      })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .lean();
-    const total = await Order.countDocuments();
-    res.status(200).json({ success: true, orders, total, totalPages: Math.ceil(total / limit) });
+
+    // ✅ Item images resolve karo (same logic as getUserOrders)
+    const updatedOrders = orders.map((order) => {
+      order.items = order.items.map((item) => {
+        const product = item.productId;
+        let image = null;
+        if (product) {
+          const variant = product.variants?.find((v) => v.sku === item.sku);
+          if (variant?.imageUrl) {
+            image = variant.imageUrl;
+          } else if (product.images?.length > 0) {
+            image = product.images[0];
+          }
+        }
+        return { ...item, image };
+      });
+      return order;
+    });
+
+    const total = await Order.countDocuments(query);
+    res.status(200).json({ success: true, orders: updatedOrders, total, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     res.status(500).json({ message: "Couldn't get orders", error: error.message });
   }
@@ -156,7 +180,7 @@ export const createOrder = async (req, res) => {
         return res.status(400).json({ success: false, message: "Coupon usage limit reached" });
 
       if (coupon.perCustomerLimit) {
-        const userOrdersWithCoupon = await Order.countDocuments({ user: userId, coupon: couponId }); 
+        const userOrdersWithCoupon = await Order.countDocuments({ user: userId, coupon: couponId });
         if (userOrdersWithCoupon >= coupon.perCustomerLimit)
           return res.status(400).json({
             success: false,
@@ -165,7 +189,7 @@ export const createOrder = async (req, res) => {
       }
 
       if (coupon.firstPurchaseOnly) {
-        const previousOrders = await Order.countDocuments({ user: userId }); 
+        const previousOrders = await Order.countDocuments({ user: userId });
         if (previousOrders > 0)
           return res.status(400).json({
             success: false,
@@ -241,7 +265,6 @@ export const createOrder = async (req, res) => {
       await Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } }).catch(() => {});
     }
 
-    // Clear cart after order creation ✅ UNCOMMENTED
     await Cart.findOneAndDelete({ user: userId }).catch(() => {});
 
     res.status(201).json({ message: "Order created successfully", data: newOrder });
@@ -269,7 +292,6 @@ export const getOrdersByMonth = async (req, res) => {
     const startDate = new Date(yearNum, monthNum - 1, 1);
     const endDate = new Date(yearNum, monthNum, 1);
 
-    // ✅ FIXED: orderDate → createdAt
     const orders = await Order.find({ createdAt: { $gte: startDate, $lt: endDate } }).sort({
       createdAt: "asc",
     });
@@ -291,7 +313,6 @@ export const getOrdersThisMonth = async (req, res) => {
     const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-    // ✅ FIXED: orderDate → createdAt
     const orders = await Order.find({ createdAt: { $gte: startDate, $lt: endDate } }).sort({
       createdAt: "asc",
     });
@@ -315,7 +336,6 @@ export const getOrdersLastMonth = async (req, res) => {
     const startDate = new Date(year, month, 1);
     const endDate = new Date(year, month + 1, 1);
 
-    // ✅ FIXED: orderDate → createdAt
     const orders = await Order.find({ createdAt: { $gte: startDate, $lt: endDate } }).sort({
       createdAt: "asc",
     });
@@ -337,7 +357,6 @@ export const getOrdersThisYear = async (req, res) => {
     const startDate = new Date(now.getFullYear(), 0, 1);
     const endDate = new Date(now.getFullYear() + 1, 0, 1);
 
-    // ✅ FIXED: orderDate → createdAt
     const orders = await Order.find({ createdAt: { $gte: startDate, $lt: endDate } }).sort({
       createdAt: "asc",
     });
@@ -361,17 +380,15 @@ export const editOrderById = async (req, res) => {
     const { shippingAddress, paymentMethod, paymentStatus, orderStatus, totalAmount, notes, priority } =
       req.body;
 
-    // ✅ FIXED: single DB call, only update provided fields, trackingnumber preserved automatically
     const updateFields = {};
-    if (shippingAddress)                    updateFields.shippingAddress = shippingAddress;
-    if (paymentMethod)                      updateFields["payment.method"] = paymentMethod;
-    if (paymentStatus)                      updateFields["payment.status"] = paymentStatus;
-    if (orderStatus)                        updateFields["fulfillment.orderStatus"] = orderStatus; // ✅ FIXED: correct path
-    if (totalAmount !== undefined)          updateFields.totalAmount = totalAmount;
-    if (notes !== undefined)                updateFields.notes = notes;
-    if (priority)                           updateFields.priority = priority;
+    if (shippingAddress)           updateFields.shippingAddress = shippingAddress;
+    if (paymentMethod)             updateFields["payment.method"] = paymentMethod;
+    if (paymentStatus)             updateFields["payment.status"] = paymentStatus;
+    if (orderStatus)               updateFields["fulfillment.orderStatus"] = orderStatus;
+    if (totalAmount !== undefined) updateFields.totalAmount = totalAmount;
+    if (notes !== undefined)       updateFields.notes = notes;
+    if (priority)                  updateFields.priority = priority;
 
-    // Push to status history if orderStatus changed
     if (orderStatus) {
       updateFields.$push = {
         "fulfillment.statusHistory": {
@@ -421,14 +438,14 @@ export const getUserOrders = async (req, res) => {
 
     const query = { user: userId };
     if (status) {
-      query["fulfillment.orderStatus"] = status; // ✅ FIXED: correct nested field
+      query["fulfillment.orderStatus"] = status;
     }
 
     const orders = await orderModel
       .find(query)
       .populate({
         path: "items.productId",
-        select: "images variants", // ✅ FIXED: added variants so image lookup works
+        select: "images variants",
       })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -473,11 +490,11 @@ export const getUserOrders = async (req, res) => {
 // ─── Get single order detail ────────────────────────────────────────
 export const getOrderById = async (req, res) => {
   try {
-    const orderId = req.params.id; // ✅ FIXED: was `const { orderId } = req.params.id` (broken destructuring)
+    const orderId = req.params.id;
     const userId = req.user._id;
 
     const order = await orderModel
-      .findOne({ _id: orderId, user: userId }) // ✅ FIXED: query by _id not orderId
+      .findOne({ _id: orderId, user: userId })
       .populate("items.productId")
       .populate("coupon")
       .lean();
@@ -492,7 +509,6 @@ export const getOrderById = async (req, res) => {
 };
 
 // ─── Cancel order ───────────────────────────────────────────────────
-// ✅ NEW: was missing entirely
 export const cancelOrder = async (req, res) => {
   try {
     const orderId = req.params.id;
