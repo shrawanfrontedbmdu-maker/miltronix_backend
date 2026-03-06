@@ -95,6 +95,7 @@ export const createProduct = async (req, res) => {
       const mainFiles = [];
 
       req.files.forEach((file) => {
+        // fieldname format: variantImage_0, variantImage_1, ...
         const match = file.fieldname.match(/^variantImage_(\d+)$/);
         if (match) {
           const idx = parseInt(match[1], 10);
@@ -105,7 +106,7 @@ export const createProduct = async (req, res) => {
         }
       });
 
-      // Main images upload
+      // Main product images upload
       finalImages = await Promise.all(
         mainFiles.map(async (file) => {
           const uploaded = await uploadImage(file.buffer);
@@ -113,17 +114,18 @@ export const createProduct = async (req, res) => {
         })
       );
 
-      // Variant images upload
+      // ✅ Variant images upload — index se variant match karke save karo
       if (Array.isArray(variants)) {
         for (const [idxStr, files] of Object.entries(variantFileMap)) {
           const idx = parseInt(idxStr, 10);
+          if (!variants[idx]) continue; // safety check
+
           const uploadedImgs = await Promise.all(
             files.map(async (file) => {
               const u = await uploadImage(file.buffer);
-              return { url: u.secure_url, public_id: u.public_id, alt: name };
+              return { url: u.secure_url, public_id: u.public_id, alt: variants[idx]?.attributes?.color || name };
             })
           );
-          variants[idx] = variants[idx] || {};
           variants[idx].images = (variants[idx].images || []).concat(uploadedImgs);
         }
       }
@@ -138,16 +140,18 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: "At least one variant is required" });
     }
 
-    variants = variants.map((v) => ({ ...v, images: v.images || [] }));
-
-    for (const v of variants) {
+    variants = variants.map((v) => {
       if (!v.sku || v.price == null) {
-        return res.status(400).json({ success: false, message: "Each variant must have sku and price" });
+        throw new Error("Each variant must have sku and price");
       }
-      v.stockQuantity = 0;
-      v.hasStock = false;
-      if (!v.currency) v.currency = "INR";
-    }
+      return {
+        ...v,
+        images: v.images || [],       // ✅ uploaded images preserve karo
+        stockQuantity: 0,
+        hasStock: false,
+        currency: v.currency || "INR",
+      };
+    });
 
     /* ── Create ── */
     const product = await Product.create({
@@ -204,23 +208,22 @@ export const getProducts = async (req, res) => {
 
     if (search) filter.name = { $regex: search, $options: "i" };
 
-    // ⭐ Price filter — variants mein se koi bhi variant maxPrice ke andar ho
+    // Price filter — variants mein se koi bhi variant maxPrice ke andar ho
     if (maxPrice) {
       filter["variants"] = {
         $elemMatch: { price: { $lte: Number(maxPrice) } },
       };
     }
 
-    // ⭐ FilterOptions — string IDs ko mongoose.Types.ObjectId mein convert karo
+    // FilterOptions — string IDs ko ObjectId mein convert karo
     if (filterOptions) {
       const ids = filterOptions
         .split(",")
         .map((id) => id.trim())
-       .filter((id) => mongoose.isValidObjectId(id))  // ✅ ye lagao         // invalid IDs skip
-        .map((id) => new mongoose.Types.ObjectId(id));       // string → ObjectId
+        .filter((id) => mongoose.isValidObjectId(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
 
       if (ids.length > 0) {
-        // Product ke filterOptions array mein se koi bhi ek match ho
         filter.filterOptions = { $in: ids };
       }
     }
@@ -235,6 +238,7 @@ export const getProducts = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 /* ================= GET PRODUCT BY ID ================= */
 export const getProductById = async (req, res) => {
   try {
@@ -267,6 +271,14 @@ export const updateProduct = async (req, res) => {
     if (updateData.keyFeatures) updateData.keyFeatures = parseJSON(updateData.keyFeatures, []);
     if (updateData.tags) updateData.tags = parseJSON(updateData.tags, []);
     if (updateData.keywords) updateData.keywords = parseJSON(updateData.keywords, []);
+
+    // ✅ FIX: filterOptions parse karo aur valid ObjectIds mein convert karo
+    if (updateData.filterOptions !== undefined) {
+      const parsed = parseJSON(updateData.filterOptions, []);
+      updateData.filterOptions = parsed
+        .filter((id) => mongoose.isValidObjectId(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
+    }
 
     /* ── imagesToDelete — frontend se aaye public_ids Cloudinary se hatao ── */
     if (updateData.imagesToDelete) {
@@ -304,7 +316,7 @@ export const updateProduct = async (req, res) => {
       const uploads = await Promise.all(
         mainFiles.map(async (file) => {
           const u = await uploadImage(file.buffer);
-          return { url: u.secure_url, public_id: u.public_id, alt: updateData.name || "" };
+          return { url: u.secure_url, public_id: u.public_id, alt: updateData.name || product.name };
         })
       );
       updateData.images = uploads;
@@ -315,29 +327,51 @@ export const updateProduct = async (req, res) => {
       const newVariants = parseJSON(updateData.variants, []);
 
       updateData.variants = newVariants.map((newVariant) => {
-        // Stock fields existing se preserve karo
+        // Existing variant dhundo SKU se
         const existingVariant = product.variants.find((v) => v.sku === newVariant.sku);
+
         return {
           ...newVariant,
+          // ✅ Stock fields preserve karo
           stockQuantity: existingVariant?.stockQuantity ?? 0,
           stockStatus: existingVariant?.stockStatus ?? "out-of-stock",
           hasStock: existingVariant?.hasStock ?? false,
-          images: newVariant.images || [],
+          // ✅ Purani images preserve karo agar nayi nahi aayi
+          images:
+            newVariant.images?.length > 0
+              ? newVariant.images
+              : existingVariant?.images || [],
         };
       });
 
-      // Variant images upload karo
+      // ✅ Variant images upload karo (nayi files aayi hon to)
       for (const [idxStr, files] of Object.entries(variantFileMap)) {
         const idx = parseInt(idxStr, 10);
         if (!updateData.variants[idx]) continue;
 
+        // Purani variant images Cloudinary se delete karo
+        const existingVariant = product.variants.find(
+          (v) => v.sku === updateData.variants[idx].sku
+        );
+        if (existingVariant?.images?.length > 0) {
+          await Promise.all(
+            existingVariant.images.map((img) => img.public_id && deleteImage(img.public_id))
+          );
+        }
+
+        // Nayi images upload karo
         const uploadedImgs = await Promise.all(
           files.map(async (file) => {
             const u = await uploadImage(file.buffer);
-            return { url: u.secure_url, public_id: u.public_id, alt: "" };
+            return {
+              url: u.secure_url,
+              public_id: u.public_id,
+              alt: updateData.variants[idx]?.attributes?.color || "",
+            };
           })
         );
-        updateData.variants[idx].images = (updateData.variants[idx].images || []).concat(uploadedImgs);
+
+        updateData.variants[idx].images = uploadedImgs;
       }
     } else {
       // Variants field nahi aaya to existing rakhni chahiye
@@ -360,7 +394,6 @@ export const updateProduct = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 /* ================= DELETE PRODUCT ================= */
 export const deleteProduct = async (req, res) => {
   try {
