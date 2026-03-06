@@ -272,12 +272,27 @@ export const updateProduct = async (req, res) => {
     if (updateData.tags) updateData.tags = parseJSON(updateData.tags, []);
     if (updateData.keywords) updateData.keywords = parseJSON(updateData.keywords, []);
 
-    // ✅ FIX: filterOptions parse karo aur valid ObjectIds mein convert karo
+    // ✅ FIX: filterOptions — double stringify handle karo
     if (updateData.filterOptions !== undefined) {
-      const parsed = parseJSON(updateData.filterOptions, []);
-      updateData.filterOptions = parsed
-        .filter((id) => mongoose.isValidObjectId(id))
-        .map((id) => new mongoose.Types.ObjectId(id));
+      let parsed = updateData.filterOptions;
+
+      // Step 1: agar string hai to parse karo
+      if (typeof parsed === "string") {
+        try { parsed = JSON.parse(parsed); } catch { parsed = []; }
+      }
+
+      // Step 2: double stringify case — array ka pehla element khud JSON string hai
+      // e.g. ["[\"id1\",\"id2\"]"] → ["id1","id2"]
+      if (Array.isArray(parsed) && parsed.length === 1 && typeof parsed[0] === "string") {
+        try { parsed = JSON.parse(parsed[0]); } catch { parsed = []; }
+      }
+
+      // Step 3: valid ObjectIds mein convert karo
+      updateData.filterOptions = Array.isArray(parsed)
+        ? parsed
+          .filter((id) => mongoose.isValidObjectId(String(id)))
+          .map((id) => new mongoose.Types.ObjectId(String(id)))
+        : [];
     }
 
     /* ── imagesToDelete — frontend se aaye public_ids Cloudinary se hatao ── */
