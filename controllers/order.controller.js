@@ -5,16 +5,40 @@ import Address from "../models/address.model.js";
 import Cart from "../models/cart.model.js";
 import Coupon from "../models/coupons.model.js";
 import orderModel from "../models/order.model.js";
+import { Customer } from "../models/customer.model.js"; // ✅ ADDED: Customer model import
 
 
 export const getOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 20, userId } = req.query; // ✅ userId query param add kiya
-    const query = userId ? { user: userId } : {};        // ✅ filter by user if provided
+    const { page = 1, limit = 20, userId } = req.query;
+
+    let query = {};
+
+    if (userId) {
+      // ✅ FIX: userId = Customer._id, but orders are linked to User._id
+      // Step 1: Customer se email nikalo
+      const customer = await Customer.findById(userId).select("email").lean();
+
+      if (!customer) {
+        return res.status(200).json({ success: true, orders: [], total: 0, totalPages: 0 });
+      }
+
+      // Step 2: Us email se User dhundho
+      const user = await User.findOne({ email: customer.email }).select("_id").lean();
+
+      if (!user) {
+        // Customer exist karta hai but app account nahi hai
+        return res.status(200).json({ success: true, orders: [], total: 0, totalPages: 0 });
+      }
+
+      // Step 3: Sahi User._id se orders fetch karo
+      query = { user: user._id };
+    }
+
     const orders = await Order.find(query)
       .populate({
         path: "items.productId",
-        select: "images variants",                       // ✅ image resolve ke liye populate
+        select: "images variants",
       })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
