@@ -1,14 +1,25 @@
 import express from "express";
+import authMiddleware from "../middlewares/auth.js";
 import upload from "../middlewares/multer.js";
-import { getAdminProfile, upsertAdminProfile } from "../controllers/profile.controller.js";
-const route = express.Router();
+import {
+  getMyProfile,
+  createProfile,
+  updateProfile,
+  uploadAvatarHandler,
+  deleteAvatarHandler,
+  deleteProfile,
+} from "../controllers/profile.controller.js";
 
-route.get("/", getAdminProfile);
-route.get("/", getAdminProfile);
-route.put("/update", upload.fields([
-    { name: "avatar", maxCount: 1 },
-    { name: "coverImage", maxCount: 1 }
-]), upsertAdminProfile);
+const router = express.Router();
 
+// ── Profile CRUD ─────────────────────────────────────────
+router.get   ("/me",        authMiddleware, getMyProfile);
+router.post  ("/create",    authMiddleware, createProfile);
+router.put   ("/me",        authMiddleware, updateProfile);
+router.delete("/me",        authMiddleware, deleteProfile);
 
-export default route;
+// ── Avatar ───────────────────────────────────────────────
+router.post  ("/me/avatar", authMiddleware, upload.single("avatar"), uploadAvatarHandler);
+router.delete("/me/avatar", authMiddleware, deleteAvatarHandler);
+
+export default router;

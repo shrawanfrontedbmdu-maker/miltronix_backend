@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js";
+import Admin from "../models/admin.model.js";
 
 const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -11,7 +11,13 @@ const authMiddleware = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select("-password");
+    const admin = await Admin.findById(decoded.id);
+
+    if (!admin) {
+      return res.status(401).json({ message: "Admin not found" });
+    }
+
+    req.user = admin;
     next();
   } catch (err) {
     res.status(401).json({ message: "Invalid token" });

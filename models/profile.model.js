@@ -1,29 +1,39 @@
 import mongoose from "mongoose";
 
-const adminProfileSchema = new mongoose.Schema(
+const profileSchema = new mongoose.Schema(
   {
-    fullName: { type: String, trim: true },
-    title: { type: String, trim: true },
-    avatar: { type: String },
-    coverImage: { type: String },
-    isVerified: { type: Boolean, default: false },
+    // ── Linked to Auth User ──────────────────────────────
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
 
-    experienceYears: { type: String }, // "3+"
-    certificates: { type: Number },
-    internships: { type: Number },
+    // ── Display Info ─────────────────────────────────────
+    avatar:         { type: String, default: "" },
+    avatarPublicId: { type: String, default: "" },
+    bio:            { type: String, default: "", maxlength: 500 },
+    phone:          { type: String, default: "", trim: true },
 
-    jobTitle: { type: String },
-    education: { type: String },
-    location: { type: String },
-    followers: { type: String },
+    // ── Activity ─────────────────────────────────────────
+    lastLogin: { type: Date },
+    lastSeen:  { type: Date },
 
-    email: { type: String },
-    website: { type: String },
-    languages: { type: String },
-    status: { type: String, default: "Active" },
-
-    about: { type: String }
+    // ── Status ───────────────────────────────────────────
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    strict: true,
+    toJSON:   { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
-export default mongoose.model("AdminProfile", adminProfileSchema);
+
+profileSchema.index({ userId: 1 });
+
+export default mongoose.model("Profile", profileSchema);
